@@ -4,6 +4,7 @@ import datetime
 import time
 import urllib
 import requests
+import json
 
 from flathunter.abstract_processor import Processor
 
@@ -65,7 +66,11 @@ class GMapsDurationProcessor(Processor):
         # retrieve the result
         url = base_url.format(dest=dest, mode=mode, origin=address,
                               key=gm_key, arrival=arrival_time)
-        result = requests.get(url).json()
+        try:
+            result = requests.get(url).json()
+        except json.decoder.JSONDecodeError:
+            print("Got JSON decode error from google maps\n")
+            return None
         if result['status'] != 'OK':
             self.__log__.error("Failed retrieving distance to address %s: %s", address, result)
             return None
