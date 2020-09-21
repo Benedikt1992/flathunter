@@ -136,7 +136,10 @@ class PPSFilter:
         price = ExposeHelper.get_price(expose)
         if size is None or price is None:
             return True
-        pps = price / size
+        try:
+            pps = price / size
+        except ZeroDivisionError:
+            return True
         return pps <= self.max_pps
 
 class PredicateFilter:
