@@ -94,9 +94,9 @@ jobs:
             echo "Informational only - usually bot protection or a changed portal layout."
             echo
             echo '```'
-            grep -E '^(FAILED|ERROR) ' live-tests.log || echo "pytest failed, see the 'Run live tests' log"
+            grep -E '^(FAILED|ERROR) [^ ]+::' live-tests.log || echo "pytest failed, see the 'Run live tests' log"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-          grep -E '^(FAILED|ERROR) ' live-tests.log | cut -c1-200 | while read -r line; do
+          grep -E '^(FAILED|ERROR) [^ ]+::' live-tests.log | cut -c1-200 | while read -r line; do
             echo "::warning title=Live portal test::$line"
           done || true
