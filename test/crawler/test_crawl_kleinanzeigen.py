@@ -36,7 +36,8 @@ def test_process_expose_fetches_details(crawler):
     entries = crawler.extract_data(soup)
     assert entries is not None
     assert len(entries) > 0
-    updated_entries = [ crawler.get_expose_details(expose) for expose in entries ]
+    # Opening every expose in the browser takes minutes; a few are enough
+    updated_entries = [ crawler.get_expose_details(expose) for expose in entries[:3] ]
     for expose in updated_entries:
         print(expose)
         for attr in [ 'title', 'price', 'size', 'rooms', 'address', 'from' ]:
