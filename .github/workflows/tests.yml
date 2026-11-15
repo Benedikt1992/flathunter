@@ -53,11 +53,11 @@ jobs:
   live-tests:
     # Crawls the real property portals. These regularly fail on GitHub runners
     # (bot protection / captchas, site layout changes), so this job is
-    # informational only and does not turn the workflow red.
+    # informational only: failures are reported as warnings and in the job
+    # summary, but the job itself stays green.
     name: Live portal tests
     runs-on: ubuntu-latest
     environment: test
-    continue-on-error: true
 
     steps:
       - uses: actions/checkout@v3
@@ -75,9 +75,28 @@ jobs:
           pipenv requirements > requirements.txt
           pip install -r requirements.txt
       - name: Run live tests
-        run: pytest -m live test
+        id: live
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          pytest -m live -rf test 2>&1 | tee live-tests.log
         env:
           FLATHUNTER_HEADLESS_BROWSER: true
           FLATHUNTER_CAPMONSTER_KEY: ${{ secrets.CAPMONSTER_API_KEY }}
           WDM_LOCAL: 1
           CHROMIUM_BIN: /opt/hostedtoolcache/chromium/stable/x64/chrome
+      - name: Report failing live tests
+        if: steps.live.outcome == 'failure'
+        run: |
+          {
+            echo "## Failing live portal tests"
+            echo
+            echo "Informational only - usually bot protection or a changed portal layout."
+            echo
+            echo '```'
+            grep -E '^(FAILED|ERROR) ' live-tests.log || echo "pytest failed, see the 'Run live tests' log"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          grep -E '^(FAILED|ERROR) ' live-tests.log | cut -c1-200 | while read -r line; do
+            echo "::warning title=Live portal test::$line"
+          done || true
