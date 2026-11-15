@@ -3,7 +3,7 @@ import re
 from typing import Optional, List, Dict, Any, Union
 
 import requests
-from bs4 import BeautifulSoup, Tag
+from bs4 import BeautifulSoup, NavigableString, Tag
 
 from flathunter.logging import logger
 from flathunter.abstract_crawler import Crawler
@@ -148,6 +148,97 @@ def parse_expose_element_to_details(row: Tag, crawler: str) -> Optional[Dict]:
     return details
 
 
+def _clean_text(element: Optional[Union[Tag, NavigableString, int]]) -> str:
+    """Return the whitespace-normalised text of a soup element"""
+    if not isinstance(element, Tag):
+        return ""
+    return ' '.join(element.get_text(' ', strip=True).split())
+
+
+def get_card_url(card: Tag, expose_id: int) -> Optional[str]:
+    """Build the expose URL from a list card (2026 layout)
+
+    Promoted cards link to the search page with an asset_id parameter
+    instead of the expose, so the canonical URL is rebuilt from the
+    category/city prefix of the link and the expose id."""
+    href = card.attrs.get('href')
+    if not isinstance(href, str):
+        return None
+    path_match = re.match(r'/?([^.?/]+)\.', href)
+    if path_match is None:
+        return None
+    return f'https://www.wg-gesucht.de/{path_match[1]}.{expose_id}.html'
+
+
+def get_card_image_url(card: Tag) -> Optional[str]:
+    """Return the first slider image of a list card (2026 layout)"""
+    img = card.find('img', attrs={'data-src': True})
+    if not isinstance(img, Tag):
+        return None
+    src = img.attrs.get('data-src')
+    return src if isinstance(src, str) else None
+
+
+def get_card_rooms(card: Tag) -> str:
+    """Parse the number of rooms, e.g. '2,5' from '2,5-Zimmer-Wohnung'"""
+    details_el = card.find('div', {"class": "card-offer-details-text"})
+    rooms_match = re.search(r'(\d+(?:,\d+)?)-Zimmer', _clean_text(details_el))
+    return rooms_match[1] if rooms_match else ""
+
+
+def parse_card_element_to_details(card: Tag, crawler: str) -> Optional[Dict]:
+    """Parse a list card (WG-Gesucht layout since 2026) to an Expose details dictionary"""
+    if is_verified_company(card):
+        logger.debug("Advert found - skipping")
+        return None
+    data_id = card.attrs.get('data-id')
+    if not isinstance(data_id, str) or not data_id.isdigit():
+        logger.warning("No expose id found - skipping")
+        return None
+    expose_id = int(data_id)
+    title = _clean_text(card.find(class_="card-offer-title"))
+    if not title:
+        logger.warning("No title found - skipping")
+        return None
+    url = get_card_url(card, expose_id)
+    if url is None:
+        logger.warning("No expose URL found - skipping")
+        return None
+    price_row = card.find('div', {"class": "price-row"})
+    price_el = price_row.find(class_="card-main-text") if isinstance(price_row, Tag) else None
+    price = _clean_text(price_el)
+    size = re.findall(r'\d{1,4}\s?m²', _clean_text(card.find(class_="card-offer-property-size")))
+    if len(size) == 0:
+        logger.warning("No size found - skipping")
+        return None
+    dates = re.findall(r'\d{2}\.\d{2}\.\d{4}',
+                       _clean_text(card.find(class_="card-offer-availability")))
+    if len(dates) == 0:
+        logger.warning("No dates found - skipping")
+        return None
+
+    if len(dates) >= 2:
+        title = f"{title} vom {dates[0]} bis {dates[1]}"
+    else:
+        title = f"{title} ab dem {dates[0]}"
+
+    details = {
+        'id': expose_id,
+        'image': get_card_image_url(card),
+        'url': url,
+        'title': title,
+        'price': price,
+        'size': size[0],
+        'rooms': get_card_rooms(card),
+        'address': url,
+        'crawler': crawler,
+        'from': dates[0]
+    }
+    if len(dates) >= 2:
+        details['to'] = dates[1]
+    return details
+
+
 def liste_attribute_filter(element: Union[Tag, str]) -> bool:
     """Return true for elements whose 'id' attribute starts with 'liste-' 
     and are not contained in the 'premium_user_extra_list' container"""
@@ -180,10 +271,15 @@ class WgGesucht(Crawler):
             e for e in findings
             if isinstance(e, Tag) and e.has_attr('class') and not 'display-none' in e['class']
         ]
+        seen_ids = set()
         for row in existing_findings:
-            details = parse_expose_element_to_details(row, self.get_name())
-            if details is None:
+            if 'wgg-list-card' in row['class']:
+                details = parse_card_element_to_details(row, self.get_name())
+            else:
+                details = parse_expose_element_to_details(row, self.get_name())
+            if details is None or details['id'] in seen_ids:
                 continue
+            seen_ids.add(details['id'])
             entries.append(details)
 
         logger.debug('Number of entries found: %d', len(entries))
@@ -193,6 +289,11 @@ class WgGesucht(Crawler):
     def load_address(self, url) -> Optional[str]:
         """Extract address from expose itself"""
         response = self.get_soup_from_url(url)
+        address_link = response.find("a", {"href": "#map_container"})
+        if isinstance(address_link, Tag):
+            address = _clean_text(address_link.find("span", {"class": "section_panel_detail"}))
+            if address:
+                return address
         address_div = response.find('div', {"class": "col-sm-4 mb10"})
         if not isinstance(address_div, Tag):
             logger.debug("No address in response for URL: %s", url)
