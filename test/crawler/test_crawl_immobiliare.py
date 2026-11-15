@@ -1,3 +1,4 @@
+import pytest
 import unittest
 from flathunter.crawler.immobiliare import Immobiliare
 from test.utils.config import StringConfig
@@ -14,6 +15,7 @@ class ImmobiliareCrawlerTest(unittest.TestCase):
     def setUp(self):
         self.crawler = Immobiliare(StringConfig(string=self.DUMMY_CONFIG))
 
+    @pytest.mark.live
     def test(self):
         soup = self.crawler.get_page(self.TEST_URL)
         self.assertIsNotNone(soup, "Should get a soup from the URL")

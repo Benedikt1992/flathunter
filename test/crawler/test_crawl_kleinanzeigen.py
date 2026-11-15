@@ -14,6 +14,7 @@ TEST_URL = 'https://www.kleinanzeigen.de/s-wohnung-mieten/berlin/preis:1000:1500
 def crawler():
     return Kleinanzeigen(StringConfig(string=DUMMY_CONFIG))
 
+@pytest.mark.live
 def test_crawler(crawler):
     soup = crawler.get_page(TEST_URL)
     assert soup is not None
@@ -25,6 +26,7 @@ def test_crawler(crawler):
     for attr in [ 'title', 'price', 'size', 'rooms', 'address' ]:
         assert entries[0][attr]
 
+@pytest.mark.live
 def test_process_expose_fetches_details(crawler):
     soup = crawler.get_page(TEST_URL)
     assert soup is not None

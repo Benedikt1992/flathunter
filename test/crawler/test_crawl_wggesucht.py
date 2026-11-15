@@ -1,3 +1,4 @@
+import pytest
 import os
 import unittest
 from typing import Dict
@@ -16,6 +17,7 @@ class WgGesuchtCrawlerTest(unittest.TestCase):
     def setUp(self):
         self.crawler = WgGesucht(StringConfig(string=self.DUMMY_CONFIG))
 
+    @pytest.mark.live
     def test(self):
         soup = self.crawler.get_page(self.TEST_URL)
         self.assertIsNotNone(soup, "Should get a soup from the URL")
