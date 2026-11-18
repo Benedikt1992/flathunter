@@ -1,0 +1,122 @@
+; Architecture contracts, enforced in CI by import-linter (`lint-imports`).
+; See ARCHITECTURE.md for the reasoning behind each rule.
+; Changing this file requires maintainer approval (CODEOWNERS + agent guard).
+
+[importlinter]
+root_package = flathunter
+include_external_packages = True
+
+[importlinter:contract:leaf-modules]
+name = Shared leaf modules (logging, exceptions, utils, time_utils) depend on nothing internal
+type = forbidden
+source_modules =
+    flathunter.logging
+    flathunter.exceptions
+    flathunter.utils
+    flathunter.time_utils
+forbidden_modules =
+    flathunter.abstract_crawler
+    flathunter.abstract_notifier
+    flathunter.abstract_processor
+    flathunter.captcha
+    flathunter.config
+    flathunter.crawler
+    flathunter.notifiers
+    flathunter.processor
+    flathunter.default_processors
+    flathunter.hunter
+    flathunter.web_hunter
+    flathunter.web
+
+[importlinter:contract:crawlers-isolated]
+name = Crawlers only fetch and parse listings; they know nothing about processing, notifying or the web UI
+type = forbidden
+source_modules =
+    flathunter.crawler
+    flathunter.abstract_crawler
+    flathunter.webdriver_crawler
+forbidden_modules =
+    flathunter.notifiers
+    flathunter.abstract_notifier
+    flathunter.processor
+    flathunter.default_processors
+    flathunter.hunter
+    flathunter.web_hunter
+    flathunter.web
+    flathunter.config
+    flathunter.idmaintainer
+    flathunter.googlecloud_idmaintainer
+allow_indirect_imports = True
+
+[importlinter:contract:crawlers-independent]
+name = Crawler implementations do not import each other
+type = independence
+modules =
+    flathunter.crawler.idealista
+    flathunter.crawler.immobiliare
+    flathunter.crawler.immobilienscout
+    flathunter.crawler.immowelt
+    flathunter.crawler.kleinanzeigen
+    flathunter.crawler.subito
+    flathunter.crawler.vrmimmo
+    flathunter.crawler.wggesucht
+
+[importlinter:contract:notifiers-isolated]
+name = Notifiers only deliver messages; they know nothing about crawling, the hunt loop or the web UI
+type = forbidden
+source_modules =
+    flathunter.notifiers
+    flathunter.abstract_notifier
+forbidden_modules =
+    flathunter.crawler
+    flathunter.abstract_crawler
+    flathunter.webdriver_crawler
+    flathunter.captcha
+    flathunter.hunter
+    flathunter.web_hunter
+    flathunter.web
+    flathunter.processor
+allow_indirect_imports = True
+
+[importlinter:contract:notifiers-independent]
+name = Notifier implementations do not import each other
+type = independence
+modules =
+    flathunter.notifiers.sender_apprise
+    flathunter.notifiers.sender_mattermost
+    flathunter.notifiers.sender_slack
+    flathunter.notifiers.sender_telegram
+
+[importlinter:contract:captcha-isolated]
+name = Captcha solvers are standalone adapters
+type = forbidden
+source_modules =
+    flathunter.captcha
+forbidden_modules =
+    flathunter.config
+    flathunter.crawler
+    flathunter.abstract_crawler
+    flathunter.notifiers
+    flathunter.processor
+    flathunter.hunter
+    flathunter.web_hunter
+    flathunter.web
+
+[importlinter:contract:web-on-top]
+name = The web UI is the outermost layer; nothing in the core imports it
+type = forbidden
+source_modules =
+    flathunter.config
+    flathunter.crawler
+    flathunter.abstract_crawler
+    flathunter.notifiers
+    flathunter.captcha
+    flathunter.processor
+    flathunter.default_processors
+    flathunter.hunter
+    flathunter.web_hunter
+    flathunter.idmaintainer
+    flathunter.googlecloud_idmaintainer
+    flathunter.filter
+forbidden_modules =
+    flathunter.web

@@ -1,0 +1,7 @@
+{"type":"object","additionalProperties":false,
+ "required":["plan_markdown","size","architecture_impact","open_questions"],
+ "properties":{
+  "plan_markdown":{"type":"string","description":"The implementation plan in markdown"},
+  "size":{"type":"string","enum":["S","M","L","too-large"]},
+  "architecture_impact":{"type":"string","enum":["none","within-rules","needs-adr"]},
+  "open_questions":{"type":"array","items":{"type":"string"}}}}

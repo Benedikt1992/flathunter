@@ -109,3 +109,6 @@ requirements.txt
 
 # OS files
 .DS_Store
+
+# Agent working files (context, prompts) - never committed
+.agent/

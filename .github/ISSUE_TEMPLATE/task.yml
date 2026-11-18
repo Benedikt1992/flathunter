@@ -1,0 +1,60 @@
+name: Task (agent-ready)
+description: A change with clear acceptance criteria, suitable for an agent or a human
+title: "[Task] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Agents only start after the maintainer adds `agent:plan` or `agent:ready`.
+        The better the acceptance criteria, the better the result.
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What problem does this solve, for whom? (why, not how)
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Testable statements. Each one becomes at least one test.
+      placeholder: |
+        - [ ] Given …, when …, then …
+        - [ ] …
+    validations:
+      required: true
+  - type: textarea
+    id: non-goals
+    attributes:
+      label: Non-goals
+      description: What is explicitly out of scope?
+  - type: dropdown
+    id: components
+    attributes:
+      label: Affected components
+      description: See ARCHITECTURE.md
+      multiple: true
+      options:
+        - Crawler (crawler/*)
+        - Processor / Filter
+        - Notifier (notifiers/*)
+        - Captcha
+        - Config
+        - Persistence (idmaintainer)
+        - Web UI
+        - Hunter / entry points
+        - Not sure
+  - type: textarea
+    id: hints
+    attributes:
+      label: Hints and constraints
+      description: Preferred approach, relevant files, examples, links. Optional.
+  - type: dropdown
+    id: size
+    attributes:
+      label: Expected size
+      options:
+        - S (a few hours)
+        - M (about a day)
+        - L (should probably be split)

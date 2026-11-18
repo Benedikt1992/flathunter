@@ -1,0 +1,38 @@
+# Agent · Queue
+# Trigger: an agent PR is merged or closed (frees a work-in-progress slot).
+# Result:  starts the oldest issue labelled `agent:queued`. No model runs here.
+name: "Agent · Queue"
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  actions: write
+  issues: write
+
+jobs:
+  next:
+    if: startsWith(github.event.pull_request.head.ref, 'agent/issue-')
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      BRANCH: ${{ github.event.pull_request.head.ref }}
+      MERGED: ${{ github.event.pull_request.merged }}
+    steps:
+      - name: Clean up labels of the finished issue
+        run: |
+          issue="${BRANCH#agent/issue-}"
+          gh issue edit "$issue" --repo "$REPO" --remove-label agent:in-progress || true
+          if [ "$MERGED" != "true" ]; then
+            gh issue comment "$issue" --repo "$REPO" --body "Agent PR was closed without merging. Re-add \`agent:ready\` to start over (delete branch \`$BRANCH\` first)."
+          fi
+      - name: Start next queued issue
+        run: |
+          next=$(gh issue list --repo "$REPO" --state open --label agent:queued --label agent:ready \
+                 --json number,createdAt --jq 'sort_by(.createdAt) | .[0].number // empty')
+          if [ -n "$next" ]; then
+            gh workflow run agent-implement.yml --repo "$REPO" \
+              --ref "${{ github.event.repository.default_branch }}" -f issue="$next"
+          fi

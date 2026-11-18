@@ -21,6 +21,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # diff-cover compares against the base branch
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v4
         with:
@@ -42,6 +44,14 @@ jobs:
           FLATHUNTER_CAPMONSTER_KEY: ${{ secrets.CAPMONSTER_API_KEY }}
           WDM_LOCAL: 1
           CHROMIUM_BIN: /opt/hostedtoolcache/chromium/stable/x64/chrome
+      - name: Coverage of changed lines (>= 80 %)
+        if: github.event_name == 'pull_request' && matrix.python-version == '3.11'
+        run: |
+          pip install diff-cover
+          coverage xml
+          diff-cover coverage.xml --compare-branch="origin/${{ github.base_ref }}" --fail-under=80 \
+            --markdown-report "$RUNNER_TEMP/diff-cover.md"
+          cat "$RUNNER_TEMP/diff-cover.md" >> "$GITHUB_STEP_SUMMARY"
       - name: Run codecov
         if: ${{ success() }}
         uses: codecov/codecov-action@v3
