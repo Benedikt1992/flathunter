@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
-import subprocess  # nosec B404 - runs fixed tool commands
+import subprocess
 import sys
 from pathlib import Path
 
@@ -30,7 +30,7 @@ MAX_OUTPUT = 6000
 
 def run(cmd: list[str], timeout: int = 300) -> subprocess.CompletedProcess[str]:
     """Run a command in the repository root."""
-    return subprocess.run(  # nosec B603
+    return subprocess.run(
         cmd, cwd=ROOT, capture_output=True, text=True, timeout=timeout, check=False
     )
 

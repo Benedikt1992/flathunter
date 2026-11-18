@@ -21,7 +21,7 @@ import argparse
 import ast
 import json
 import re
-import subprocess  # nosec B404 - runs fixed tool commands
+import subprocess
 import sys
 from collections import Counter
 from pathlib import Path
@@ -33,7 +33,7 @@ MAX_SHOWN = 30
 
 def run(cmd: list[str], timeout: int | None = None) -> subprocess.CompletedProcess[str]:
     """Run a command in the repository root."""
-    return subprocess.run(  # nosec B603
+    return subprocess.run(
         cmd, cwd=ROOT, capture_output=True, text=True, timeout=timeout, check=False
     )
 

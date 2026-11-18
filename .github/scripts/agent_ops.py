@@ -19,7 +19,7 @@ import argparse
 import json
 import os
 import re
-import subprocess  # nosec B404 - only runs the gh CLI with fixed arguments
+import subprocess
 import sys
 import tempfile
 import time
@@ -37,7 +37,7 @@ BLOCKING_SEVERITIES = {"blocker", "major"}
 
 def gh(*args: str, input_text: str | None = None, check: bool = True) -> str:
     """Run the gh CLI and return stdout."""
-    result = subprocess.run(  # nosec B603 B607 - fixed executable, list arguments
+    result = subprocess.run(
         ["gh", *args], input=input_text, capture_output=True, text=True, check=False
     )
     if check and result.returncode != 0:
@@ -478,7 +478,7 @@ def cmd_post_review(args) -> int:
         "comments": inline,
         "commit_id": args.sha,
     }
-    result = subprocess.run(  # nosec B603 B607
+    result = subprocess.run(
         ["gh", "api", f"repos/{repo()}/pulls/{args.pr}/reviews", "--input", "-"],
         input=json.dumps(payload),
         capture_output=True,

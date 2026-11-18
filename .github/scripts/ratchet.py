@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import argparse
 import json
-import subprocess  # nosec B404 - runs fixed tool commands
+import subprocess
 import sys
 import tempfile
 from collections import Counter
@@ -96,7 +96,7 @@ def is_shrink(kind: str, base_text: str | None, head_text: str | None) -> bool:
 
 def run(cmd: list[str], check: bool = False) -> subprocess.CompletedProcess[str]:
     """Run a command in the repository root."""
-    return subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, check=check)  # nosec B603
+    return subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, check=check)
 
 
 def load_json(path: Path, default):

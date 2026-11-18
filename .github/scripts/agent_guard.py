@@ -21,7 +21,7 @@ import fnmatch
 import json
 import os
 import re
-import subprocess  # nosec B404 - only runs fixed git commands
+import subprocess
 import sys
 import urllib.request
 from dataclasses import dataclass, field
@@ -198,7 +198,7 @@ def github_get(url: str, token: str) -> list | dict:
                 "Accept": "application/vnd.github+json",
             },
         )
-        with urllib.request.urlopen(request, timeout=30) as response:  # nosec B310 - https API URL
+        with urllib.request.urlopen(request, timeout=30) as response:
             data = json.load(response)
             link = response.headers.get("Link", "")
         if not isinstance(data, list):
@@ -220,7 +220,7 @@ def main() -> int:
     parser.add_argument("--author", required=True, help="PR author login")
     args = parser.parse_args()
 
-    diff_text = subprocess.run(  # nosec B603 B607 - fixed git command
+    diff_text = subprocess.run(
         ["git", "diff", "--unified=0", "--no-color", f"{args.base}...{args.head}"],
         check=True,
         capture_output=True,
@@ -228,7 +228,7 @@ def main() -> int:
     ).stdout
 
     def git_show(sha: str, path: str) -> str | None:
-        result = subprocess.run(  # nosec B603 B607 - fixed git command
+        result = subprocess.run(
             ["git", "show", f"{sha}:{path}"], capture_output=True, text=True, check=False
         )
         return result.stdout if result.returncode == 0 else None
@@ -246,9 +246,9 @@ def main() -> int:
     if findings and token:
         api = f"https://api.github.com/repos/{args.repo}/issues/{args.pr}"
         issue = github_get(api, token)
-        current = {label["name"] for label in issue.get("labels", [])}  # type: ignore[union-attr]
+        current = {label["name"] for label in issue.get("labels", [])}
         events = github_get(f"{api}/events?per_page=100", token)
-        granted = labels_granted_by(events, current, args.maintainer)  # type: ignore[arg-type]
+        granted = labels_granted_by(events, current, args.maintainer)
 
     blocking = [f for f in findings if f.label not in granted]
     allowed = [f for f in findings if f.label in granted]
