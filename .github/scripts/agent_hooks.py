@@ -105,7 +105,8 @@ def stop(payload: dict) -> int:
     if not environment_ready():
         sys.stdout.write(
             "Quality gates skipped: project dependencies are not installed in this Python "
-            "(pip install -r requirements.txt -r requirements-dev.txt).\n"
+            "(pipenv requirements --dev > requirements.txt && "
+            "pip install -r requirements.txt -r requirements-dev.txt).\n"
         )
         return 0
     if not python_changes():

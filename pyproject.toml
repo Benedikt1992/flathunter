@@ -70,18 +70,18 @@ matches = "test/**"
 implicit-any-parameter = "ignore"   # pytest fixtures
 
 # --------------------------------------------------------------------------- deptry
-# Imports must be covered by declared (top-level) dependencies in Pipfile.
-# DEP002 (declared but unused) is reported but not enforced yet: test/lint tools
-# currently live in [packages] instead of [dev-packages].
+# Imports must be covered by declared (top-level) dependencies in Pipfile [packages],
+# and every declared dependency must be imported (DEP002). Test and type-check
+# dependencies live in [dev-packages], which this check does not read.
 [tool.deptry]
 extend_exclude = ["test", "\\.github", "chrome_driver_install\\.py"]
 
 [tool.deptry.per_rule_ignores]
+# Needed at runtime, but never imported by the scanned code.
 DEP002 = [
-    "coverage", "requests-mock", "werkzeug", "mock-firestore", "pytest-mock", "pytest",
-    "pylint", "jsonpath-ng", "pyright", "types-beautifulsoup4", "gunicorn", "certifi",
-    "jinja2", "cryptography", "setuptools",
-    "webdriver-manager",  # used by chrome_driver_install.py
+    "gunicorn",           # App Engine entrypoint (app.yaml)
+    "webdriver-manager",  # used by chrome_driver_install.py (Dockerfile.gcloud.job)
+    "setuptools",         # provides distutils for undetected-chromedriver on Python >= 3.12
 ]
 DEP003 = ["google"]   # google.cloud.firestore comes with firebase-admin
 

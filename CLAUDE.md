@@ -6,7 +6,7 @@ dependency rules (enforced by `lint-imports`) and the conventions.
 ## Setup and commands
 
 ```bash
-pipenv requirements > requirements.txt && pip install -r requirements.txt -r requirements-dev.txt
+pipenv requirements --dev > requirements.txt && pip install -r requirements.txt -r requirements-dev.txt
 prek install                              # optional: run the gates as git pre-commit hook
 
 python -m pytest -q                       # tests (no network; use requests-mock + fixtures)

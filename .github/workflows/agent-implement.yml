@@ -94,7 +94,7 @@ jobs:
         if: steps.gate.outputs.go == 'true'
         run: |
           pip install --upgrade pip pipenv
-          pipenv requirements > "$RUNNER_TEMP/requirements.txt"
+          pipenv requirements --dev > "$RUNNER_TEMP/requirements.txt"
           pip install -r "$RUNNER_TEMP/requirements.txt" -r requirements-dev.txt
 
       - name: Prepare branch and context

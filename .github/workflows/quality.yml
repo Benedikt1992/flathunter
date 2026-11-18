@@ -24,7 +24,7 @@ jobs:
       - name: Install dependencies and tooling
         run: |
           pip install --upgrade pip pipenv
-          pipenv requirements > "$RUNNER_TEMP/requirements.txt"
+          pipenv requirements --dev > "$RUNNER_TEMP/requirements.txt"
           pip install -r "$RUNNER_TEMP/requirements.txt" -r requirements-dev.txt
       - name: prek run --all-files
         run: prek run --all-files --show-diff-on-failure
