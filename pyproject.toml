@@ -87,6 +87,7 @@ DEP003 = ["google"]   # google.cloud.firestore comes with firebase-admin
 
 [tool.deptry.package_module_name_map]
 firebase-admin = ["firebase_admin", "google"]
+"ruamel.yaml" = ["ruamel"]
 
 # --------------------------------------------------------------------------- pytest
 [tool.pytest.ini_options]

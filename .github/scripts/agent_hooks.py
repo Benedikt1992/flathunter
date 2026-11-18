@@ -15,6 +15,7 @@ Both hooks do nothing when the tools are not installed (pip install -r requireme
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import shutil
@@ -89,9 +90,23 @@ def python_changes() -> bool:
     return False
 
 
+def environment_ready() -> bool:
+    """True if the project and dev dependencies are importable (else type checks are noise)."""
+    return all(
+        importlib.util.find_spec(module) is not None
+        for module in ("flask", "requests_mock", "hypothesis")
+    )
+
+
 def stop(payload: dict) -> int:
     """Run all gates once before Claude stops."""
     if payload.get("stop_hook_active") or not shutil.which("prek"):
+        return 0
+    if not environment_ready():
+        sys.stdout.write(
+            "Quality gates skipped: project dependencies are not installed in this Python "
+            "(pip install -r requirements.txt -r requirements-dev.txt).\n"
+        )
         return 0
     if not python_changes():
         return 0
