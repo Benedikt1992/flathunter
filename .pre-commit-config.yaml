@@ -1,0 +1,58 @@
+# Quality gates, run by prek (https://github.com/j178/prek; drop-in for pre-commit).
+#   pip install -r requirements-dev.txt && prek install     # once, as git hook
+#   prek run --all-files                                    # what CI and the agents run
+#
+# The same hooks run in three places: the agent loop (.claude/settings.json Stop hook),
+# the git pre-commit hook, and CI (quality.yml). All hooks check the whole project
+# (pass_filenames: false) because the ratchets compare against project-wide baselines.
+default_install_hook_types: [pre-commit]
+fail_fast: false
+
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-ratchet
+        name: ruff (lint, no new violations)
+        entry: python .github/scripts/ratchet.py ruff
+        language: system
+        pass_filenames: false
+        types: [python]
+      - id: ruff-format-ratchet
+        name: ruff format (new and clean files stay formatted)
+        entry: python .github/scripts/ratchet.py format
+        language: system
+        pass_filenames: false
+        types: [python]
+      - id: pyrefly
+        name: pyrefly (strict types, no new errors)
+        entry: pyrefly check --summary=none --error-stale-baseline
+        language: system
+        pass_filenames: false
+        types: [python]
+      - id: complexipy
+        name: complexipy (cognitive complexity <= 15, no regressions)
+        entry: complexipy flathunter --max-complexity-allowed 15 --plain
+        language: system
+        pass_filenames: false
+        types: [python]
+      - id: import-linter
+        name: import-linter (architecture contracts)
+        entry: lint-imports
+        language: system
+        pass_filenames: false
+        types: [python]
+      - id: deptry
+        name: deptry (imports match declared dependencies)
+        entry: python .github/scripts/ratchet.py deptry
+        language: system
+        pass_filenames: false
+        types: [python]
+
+  - repo: builtin
+    hooks:
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: detect-private-key
+      - id: check-added-large-files

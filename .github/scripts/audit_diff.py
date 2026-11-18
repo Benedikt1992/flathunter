@@ -5,6 +5,7 @@ The base branch may already contain known vulnerabilities; those are reported bu
 not block a pull request. Only (package, vulnerability id) pairs that appear in the
 head report but not in the base report fail the check.
 """
+
 from __future__ import annotations
 
 import json

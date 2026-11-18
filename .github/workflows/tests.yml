@@ -36,7 +36,7 @@ jobs:
           pip install pipenv
           python --version; pip --version; pipenv --version
           pipenv requirements > requirements.txt
-          pip install -r requirements.txt
+          pip install -r requirements.txt -r requirements-dev.txt
       - name: Run tests
         run: coverage run
         env:
@@ -47,7 +47,6 @@ jobs:
       - name: Coverage of changed lines (>= 80 %)
         if: github.event_name == 'pull_request' && matrix.python-version == '3.11'
         run: |
-          pip install diff-cover
           coverage xml
           diff-cover coverage.xml --compare-branch="origin/${{ github.base_ref }}" --fail-under=80 \
             --markdown-report "$RUNNER_TEMP/diff-cover.md"

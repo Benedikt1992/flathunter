@@ -1,4 +1,5 @@
 """Tests for the agent guard (run with `python -m pytest .github/scripts`)."""
+
 import agent_guard as guard
 
 DIFF = """\
@@ -45,7 +46,8 @@ def test_detects_every_violation_kind():
     findings = guard.find_violations(guard.parse_diff(DIFF))
     messages = "\n".join(f.message for f in findings)
     assert labels(findings) == sorted(
-        [guard.LABEL_PROTECTED, guard.LABEL_SUPPRESSION, guard.LABEL_TEST_REMOVAL])
+        [guard.LABEL_PROTECTED, guard.LABEL_SUPPRESSION, guard.LABEL_TEST_REMOVAL]
+    )
     assert "type: ignore" in messages
     assert "pylint disable" in messages
     assert "skipped/xfail test" in messages
@@ -72,28 +74,46 @@ def test_protected_patterns():
 
 def test_only_maintainer_labels_count():
     events = [
-        {"event": "labeled", "label": {"name": "allow-suppression"}, "actor": {"login": "claude[bot]"}},
-        {"event": "labeled", "label": {"name": "allow-protected-change"}, "actor": {"login": "Owner"}},
+        {
+            "event": "labeled",
+            "label": {"name": "allow-suppression"},
+            "actor": {"login": "claude[bot]"},
+        },
+        {
+            "event": "labeled",
+            "label": {"name": "allow-protected-change"},
+            "actor": {"login": "Owner"},
+        },
         {"event": "labeled", "label": {"name": "allow-test-removal"}, "actor": {"login": "owner"}},
-        {"event": "labeled", "label": {"name": "allow-test-removal"}, "actor": {"login": "some-bot"}},
+        {
+            "event": "labeled",
+            "label": {"name": "allow-test-removal"},
+            "actor": {"login": "some-bot"},
+        },
     ]
     current = {"allow-suppression", "allow-protected-change", "allow-test-removal"}
     assert guard.labels_granted_by(events, current, "owner") == {"allow-protected-change"}
 
 
 def test_removed_label_does_not_count():
-    events = [{"event": "labeled", "label": {"name": "allow-suppression"}, "actor": {"login": "owner"}}]
+    events = [
+        {"event": "labeled", "label": {"name": "allow-suppression"}, "actor": {"login": "owner"}}
+    ]
     assert guard.labels_granted_by(events, set(), "owner") == set()
 
 
 def test_audit_diff_only_fails_on_new_vulns(tmp_path):
     import json
+
     import audit_diff
 
     def report(*pairs):
-        return {"dependencies": [
-            {"name": name, "version": "1.0", "vulns": [{"id": vid, "fix_versions": ["2.0"]}]}
-            for name, vid in pairs]}
+        return {
+            "dependencies": [
+                {"name": name, "version": "1.0", "vulns": [{"id": vid, "fix_versions": ["2.0"]}]}
+                for name, vid in pairs
+            ]
+        }
 
     base, head = tmp_path / "base.json", tmp_path / "head.json"
     base.write_text(json.dumps(report(("werkzeug", "PYSEC-1"))))

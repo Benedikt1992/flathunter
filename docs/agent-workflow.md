@@ -11,8 +11,8 @@ Issue ──(maintainer: agent:plan)──► Planner ──► plan comment ─
         ▼
    Implementer (agent app identity)  → branch agent/issue-N, draft PR
         ▼
-   CI gates  (tests · diff coverage · pylint · pyright · lint-imports · agent guard
-              · bandit · pip-audit diff · gitleaks · CodeQL)
+   CI gates  (tests · diff coverage · prek: ruff/pyrefly/complexipy/import-linter/deptry
+              · agent guard · mutation report · pip-audit diff · gitleaks · CodeQL)
         ├─ red ──► Fixer (mode=ci) ─────────────────────────┐
         ▼ green                                             │
    Independent reviewer (github-actions[bot], read-only)    │
@@ -118,10 +118,11 @@ Settings → Rules → Rulesets → New branch ruleset, target `fork-main`:
 - Restrict deletions, block force pushes.
 - **Require a pull request before merging**: 1 approval, **Require review from Code Owners**,
   dismiss stale approvals on new commits, require conversation resolution.
-- **Require status checks to pass**: `Python 3.10`, `Python 3.11`, `Lint Code Base`,
-  `Pyright Type Checking`, `Architecture contracts`, `Agent guard`, `Bandit (SAST, medium+)`,
-  `Dependency audit`, `Secret scan (gitleaks)`, `CodeQL (Python, security-extended)`
-  (they appear in the list after they ran once). Require branches to be up to date.
+- **Require status checks to pass**: `Python 3.10`, `Python 3.11`,
+  `Static quality gates (prek)`, `Agent guard`, `Dependency audit`, `Secret scan (gitleaks)`,
+  `CodeQL (Python, security-extended)` (they appear in the list after they ran once).
+  Require branches to be up to date. `Mutation testing (report)` is informational, do not
+  make it required.
 - Bypass list: only *Repository admin* (so you can merge your own PRs). Never the agent app.
 
 ### 6. Create the labels
@@ -131,6 +132,22 @@ Actions → **Agent · Setup** → Run workflow.
 Good first issue: *"Update dependencies with known vulnerabilities"* (the Security
 workflow's weekly report lists them). Note that this touches `Pipfile.lock`, so add
 `allow-protected-change` to the PR.
+
+## Quality gates in the agent loop
+
+The static gates are defined once in `.pre-commit-config.yaml` and run in three places:
+
+1. **Agent loop**: `.claude/settings.json` hooks. After every edit of a Python file it is
+   formatted and checked with Ruff, and new violations go straight back to the agent.
+   Before the agent finishes, `prek run --all-files` runs once and failures send it back to work.
+   The same hooks help you when you use Claude Code locally.
+2. **Git hook**: `pip install -r requirements-dev.txt && prek install`.
+3. **CI**: `quality.yml` (authoritative).
+
+All gates take about 1 second. Legacy debt sits in ratchet baselines (`quality/`,
+`complexipy-snapshot.json`): new violations fail, fixed debt has to be locked in with
+`python .github/scripts/ratchet.py prune`, and the guard rejects any baseline growth
+without your `allow-protected-change` label. Tooling rationale: [ADR 0002](adr/0002-python-quality-toolchain.md).
 
 ## Costs and limits
 Each implementation is one model session (≤ 120 turns), each review/fix round another one.

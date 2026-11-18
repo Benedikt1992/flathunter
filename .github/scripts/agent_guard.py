@@ -13,6 +13,7 @@ For pull requests authored by the maintainer the findings are reported but do no
 
 Uses only the standard library so it runs before any dependency is installed.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -24,9 +25,21 @@ import subprocess  # nosec B404 - only runs fixed git commands
 import sys
 import urllib.request
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+import ratchet
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 PROTECTED_PATTERNS = [
     ".github/*",
+    ".claude/*",
+    "pyproject.toml",
+    ".pre-commit-config.yaml",
+    "requirements-dev.txt",
+    "quality/*",
+    "complexipy-snapshot.json",
     ".importlinter",
     ".pylintrc",
     "pyrightconfig.json",
@@ -44,6 +57,10 @@ SUPPRESSION_PATTERNS = [
     (re.compile(r"#\s*type:\s*ignore"), "type: ignore"),
     (re.compile(r"#\s*pyright:\s*ignore"), "pyright: ignore"),
     (re.compile(r"#\s*noqa\b"), "noqa"),
+    (re.compile(r"#\s*ruff:\s*noqa"), "ruff: noqa"),
+    (re.compile(r"#\s*pyrefly:\s*ignore"), "pyrefly: ignore"),
+    (re.compile(r"#\s*fmt:\s*(off|skip)"), "fmt: off/skip"),
+    (re.compile(r"pragma:\s*no\s*mutate"), "pragma: no mutate"),
     (re.compile(r"#\s*nosec\b"), "nosec"),
     (re.compile(r"pragma:\s*no\s*cover"), "pragma: no cover"),
     (re.compile(r"pytest\.mark\.(skip|skipif|xfail)\b"), "skipped/xfail test"),
@@ -61,6 +78,7 @@ LABEL_TEST_REMOVAL = "allow-test-removal"
 @dataclass
 class FileDiff:
     """Added/removed lines of one file in a unified diff."""
+
     path: str
     old_path: str | None = None
     deleted: bool = False
@@ -71,6 +89,7 @@ class FileDiff:
 @dataclass
 class Finding:
     """A single guard violation and the label that would allow it."""
+
     label: str
     message: str
 
@@ -110,21 +129,30 @@ def is_test_file(path: str) -> bool:
     return path.endswith(".py") and (name.startswith("test_") or name.endswith("_test.py"))
 
 
-def find_violations(files: list[FileDiff]) -> list[Finding]:
-    """Return every guard violation in the diff."""
+def find_violations(
+    files: list[FileDiff], shrink_ok: Callable[[str], bool] = lambda _path: False
+) -> list[Finding]:
+    """Return every guard violation in the diff.
+
+    `shrink_ok(path)` returns True for ratchet baselines whose change only removes debt;
+    those may change without the maintainer's label.
+    """
     findings: list[Finding] = []
     for diff in files:
         for path in {diff.path, diff.old_path or diff.path}:
-            if is_protected(path):
+            if is_protected(path) and not shrink_ok(path):
                 findings.append(Finding(LABEL_PROTECTED, f"`{path}` is a protected file"))
 
         if diff.path.endswith(".py"):
             for line in diff.added:
                 for pattern, name in SUPPRESSION_PATTERNS:
                     if pattern.search(line):
-                        findings.append(Finding(
-                            LABEL_SUPPRESSION,
-                            f"`{diff.path}` adds a suppression ({name}): `{line.strip()[:120]}`"))
+                        findings.append(
+                            Finding(
+                                LABEL_SUPPRESSION,
+                                f"`{diff.path}` adds a suppression ({name}): `{line.strip()[:120]}`",
+                            )
+                        )
 
         if is_test_file(diff.old_path or diff.path):
             if diff.deleted:
@@ -133,8 +161,9 @@ def find_violations(files: list[FileDiff]) -> list[Finding]:
                 removed = {m.group(1) for line in diff.removed if (m := TEST_FUNC.match(line))}
                 added = {m.group(1) for line in diff.added if (m := TEST_FUNC.match(line))}
                 for name in sorted(removed - added):
-                    findings.append(Finding(
-                        LABEL_TEST_REMOVAL, f"test `{name}` is removed from `{diff.path}`"))
+                    findings.append(
+                        Finding(LABEL_TEST_REMOVAL, f"test `{name}` is removed from `{diff.path}`")
+                    )
     # de-duplicate while keeping order
     seen: set[tuple[str, str]] = set()
     unique = []
@@ -153,18 +182,22 @@ def labels_granted_by(events: list[dict], current_labels: set[str], maintainer: 
         if event.get("event") == "labeled":
             name = (event.get("label") or {}).get("name", "")
             last_actor[name] = (event.get("actor") or {}).get("login", "")
-    return {name for name in current_labels
-            if last_actor.get(name, "").lower() == maintainer.lower()}
+    return {
+        name for name in current_labels if last_actor.get(name, "").lower() == maintainer.lower()
+    }
 
 
 def github_get(url: str, token: str) -> list | dict:
     """GET a GitHub API URL, following pagination for list responses."""
     results: list = []
     while url:
-        request = urllib.request.Request(url, headers={
-            "Authorization": f"Bearer {token}",
-            "Accept": "application/vnd.github+json",
-        })
+        request = urllib.request.Request(
+            url,
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/vnd.github+json",
+            },
+        )
         with urllib.request.urlopen(request, timeout=30) as response:  # nosec B310 - https API URL
             data = json.load(response)
             link = response.headers.get("Link", "")
@@ -189,8 +222,24 @@ def main() -> int:
 
     diff_text = subprocess.run(  # nosec B603 B607 - fixed git command
         ["git", "diff", "--unified=0", "--no-color", f"{args.base}...{args.head}"],
-        check=True, capture_output=True, text=True).stdout
-    findings = find_violations(parse_diff(diff_text))
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+
+    def git_show(sha: str, path: str) -> str | None:
+        result = subprocess.run(  # nosec B603 B607 - fixed git command
+            ["git", "show", f"{sha}:{path}"], capture_output=True, text=True, check=False
+        )
+        return result.stdout if result.returncode == 0 else None
+
+    def shrink_ok(path: str) -> bool:
+        kind = ratchet.RATCHET_FILES.get(path)
+        return kind is not None and ratchet.is_shrink(
+            kind, git_show(args.base, path), git_show(args.head, path)
+        )
+
+    findings = find_violations(parse_diff(diff_text), shrink_ok)
 
     granted: set[str] = set()
     token = os.environ.get("GITHUB_TOKEN", "")
@@ -209,7 +258,9 @@ def main() -> int:
     if not findings:
         lines.append("No protected files, suppressions or removed tests. ✅")
     for finding in blocking:
-        lines.append(f"- ❌ {finding.message} — needs label `{finding.label}` from @{args.maintainer}")
+        lines.append(
+            f"- ❌ {finding.message} — needs label `{finding.label}` from @{args.maintainer}"
+        )
     for finding in allowed:
         lines.append(f"- ✅ {finding.message} — allowed by `{finding.label}`")
     if blocking and by_maintainer:

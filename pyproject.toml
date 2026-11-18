@@ -1,0 +1,93 @@
+# Tool configuration (quality gates). The package itself is still built via setup.py
+# and its dependencies are managed with pipenv (Pipfile / Pipfile.lock).
+#
+# This file is protected (CODEOWNERS + agent guard): thresholds can only be changed
+# with the maintainer's approval. Baselines in quality/ may only shrink (ratchet).
+
+# ---------------------------------------------------------------------------- Ruff
+# Linter + formatter. Replaces pylint and bandit (S rules).
+# Every rule is enabled. Existing violations are recorded in quality/ruff-baseline.json
+# (line-independent); only *new* violations fail. See .github/scripts/ratchet.py.
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+extend-exclude = ["chrome_driver_install.py"]
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    # Handled by the formatter (ruff format); these rules conflict with it.
+    "W191", "E111", "E114", "E117", "E501", "D206", "D300",
+    "Q000", "Q001", "Q002", "Q003", "COM812", "COM819", "ISC001", "ISC002",
+    # Project choices.
+    "CPY001",   # no copyright header per file
+    "FIX002",   # TODOs are allowed, but TD rules require author + issue link
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.pylint]
+max-args = 6
+
+[tool.ruff.lint.flake8-type-checking]
+strict = true
+
+[tool.ruff.lint.per-file-ignores]
+"{test/**,.github/scripts/test_*.py}" = [
+    "S101",     # assert is how pytest works
+    "PLR2004",  # magic values are fine in expectations
+    "S105", "S106", "S311",  # fake secrets / non-crypto randomness in fixtures
+    "SLF001",   # tests may inspect private members
+    "D",        # test names document themselves
+    "ANN",      # fixtures and test functions need no annotations (pyrefly still checks bodies)
+    "INP001",
+]
+"**/__init__.py" = ["F401"]   # re-exports
+".github/scripts/**" = ["INP001", "T201", "S603", "S607"]  # CLI scripts calling git/gh
+
+# ------------------------------------------------------------------------- Pyrefly
+# Type checker (replaces pyright), strict preset. Existing errors are recorded in
+# quality/pyrefly-baseline.json; new code must type-check strictly.
+[tool.pyrefly]
+project-includes = ["flathunter", "test", "*.py"]
+project-excludes = ["chrome_driver_install.py", "**/node_modules", "**/__pycache__", "**/.*"]
+preset = "strict"
+python-version = "3.10"
+baseline = "quality/pyrefly-baseline.json"
+
+[tool.pyrefly.errors]
+# typing.override needs Python 3.12 (or typing_extensions, not a declared dependency).
+missing-override-decorator = "ignore"
+
+[[tool.pyrefly.sub-config]]
+matches = "test/**"
+
+[tool.pyrefly.sub-config.errors]
+implicit-any-parameter = "ignore"   # pytest fixtures
+
+# --------------------------------------------------------------------------- deptry
+# Imports must be covered by declared (top-level) dependencies in Pipfile.
+# DEP002 (declared but unused) is reported but not enforced yet: test/lint tools
+# currently live in [packages] instead of [dev-packages].
+[tool.deptry]
+extend_exclude = ["test", "\\.github", "chrome_driver_install\\.py"]
+
+[tool.deptry.per_rule_ignores]
+DEP002 = [
+    "coverage", "requests-mock", "werkzeug", "mock-firestore", "pytest-mock", "pytest",
+    "pylint", "jsonpath-ng", "pyright", "types-beautifulsoup4", "gunicorn", "certifi",
+    "jinja2", "cryptography", "setuptools",
+    "webdriver-manager",  # used by chrome_driver_install.py
+]
+DEP003 = ["google"]   # google.cloud.firestore comes with firebase-admin
+
+[tool.deptry.package_module_name_map]
+firebase-admin = ["firebase_admin", "google"]
+
+# --------------------------------------------------------------------------- pytest
+[tool.pytest.ini_options]
+testpaths = ["test"]

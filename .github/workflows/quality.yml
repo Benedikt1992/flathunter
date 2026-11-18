@@ -1,4 +1,7 @@
-# Architecture gate: dependency rules from ARCHITECTURE.md, enforced by import-linter.
+# Static quality gates. The same hooks run in the agent loop (.claude/settings.json)
+# and as git pre-commit hook (prek); this is the authoritative run.
+#   ruff (lint incl. security rules, ratchet) · ruff format (ratchet) · pyrefly strict (ratchet)
+#   complexipy (ratchet) · import-linter (architecture) · deptry · file hygiene
 name: Quality
 
 on:
@@ -10,14 +13,18 @@ permissions:
   contents: read
 
 jobs:
-  architecture:
-    name: Architecture contracts
+  gates:
+    name: Static quality gates (prek)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install import-linter
-      - name: lint-imports
-        run: lint-imports
+      - name: Install dependencies and tooling
+        run: |
+          pip install --upgrade pip pipenv
+          pipenv requirements > "$RUNNER_TEMP/requirements.txt"
+          pip install -r "$RUNNER_TEMP/requirements.txt" -r requirements-dev.txt
+      - name: prek run --all-files
+        run: prek run --all-files --show-diff-on-failure

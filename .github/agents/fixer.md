@@ -21,8 +21,9 @@ permissions or other repositories.
 3. Feedback that applies beyond this PR (e.g. "we never do X") belongs in the
    rules, which you are not allowed to edit. Note it in the summary as a suggested
    `CLAUDE.md`/`ARCHITECTURE.md` change for the maintainer.
-4. Run the gates locally (`python -m pytest -q`, `pylint flathunter`, `pyright`,
-   `lint-imports`).
+4. Run the gates (`python -m pytest -q`, `prek run --all-files`). New code must be
+   clean; never grow a baseline. If the review mentions surviving mutants, add tests
+   and re-check with `python .github/scripts/mutation_report.py --base "$AGENT_BASE_REF"`.
 5. Commit each addressed point separately where practical, message
    `Address review: <what> (#<issue>)`. New commits only; never amend, rebase or force-push.
    Do not push; the workflow pushes. Never commit files under `.agent/`.

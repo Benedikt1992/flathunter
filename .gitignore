@@ -112,3 +112,7 @@ requirements.txt
 
 # Agent working files (context, prompts) - never committed
 .agent/
+
+# Mutation testing (mutmut) working dirs and reports
+mutants/
+mutation-report/

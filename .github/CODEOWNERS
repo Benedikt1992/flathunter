@@ -9,8 +9,12 @@
 /ARCHITECTURE.md      @Benedikt1992
 /docs/adr/            @Benedikt1992
 /.importlinter        @Benedikt1992
-/.pylintrc            @Benedikt1992
-/pyrightconfig.json   @Benedikt1992
+/.claude/             @Benedikt1992
+/pyproject.toml       @Benedikt1992
+/.pre-commit-config.yaml @Benedikt1992
+/requirements-dev.txt @Benedikt1992
+/quality/             @Benedikt1992
+/complexipy-snapshot.json @Benedikt1992
 /.coveragerc          @Benedikt1992
 /Pipfile              @Benedikt1992
 /Pipfile.lock         @Benedikt1992

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.github/scripts/agent_hooks.py\" post-edit",
+            "timeout": 60,
+            "statusMessage": "Quality gate: ruff"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.github/scripts/agent_hooks.py\" stop",
+            "timeout": 600,
+            "statusMessage": "Quality gates: prek run --all-files"
+          }
+        ]
+      }
+    ]
+  }
+}

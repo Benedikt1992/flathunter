@@ -1,0 +1,12 @@
+# Quality tooling, pinned. Used identically in the agent loop (.claude hooks),
+# in pre-commit (prek, .pre-commit-config.yaml) and in CI.
+# Install: pip install -r requirements-dev.txt   (in addition to the Pipfile dependencies)
+ruff==0.17.5
+pyrefly==1.4.1
+prek==0.5.11
+import-linter==2.17
+complexipy==9.0.0
+deptry==0.25.1
+diff-cover==11.0.3
+mutmut==3.8.1
+hypothesis==6.170.15

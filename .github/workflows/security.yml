@@ -12,18 +12,8 @@ on:
 permissions:
   contents: read
 
+# SAST (formerly bandit) runs as Ruff's S rules in quality.yml; CodeQL in codeql.yml.
 jobs:
-  bandit:
-    name: Bandit (SAST, medium+)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - run: pip install bandit
-      - run: bandit -r flathunter --severity-level medium --confidence-level medium
-
   dependencies:
     name: Dependency audit
     runs-on: ubuntu-latest

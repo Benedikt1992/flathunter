@@ -1,0 +1,44 @@
+# Mutation testing of the modules a PR changed (report only, never blocking).
+# Surviving mutants in changed functions mean the tests do not check that code.
+# The independent agent reviewer reads this report (artifact `mutation-report`)
+# and treats such survivors as weak tests.
+name: Mutation
+
+on:
+  pull_request:
+    paths:
+      - "flathunter/**.py"
+
+permissions:
+  contents: read
+
+jobs:
+  mutation:
+    name: Mutation testing (report)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies and tooling
+        run: |
+          pip install --upgrade pip pipenv
+          pipenv requirements > "$RUNNER_TEMP/requirements.txt"
+          pip install -r "$RUNNER_TEMP/requirements.txt" -r requirements-dev.txt
+      - name: Mutate changed modules
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          FLATHUNTER_HEADLESS_BROWSER: "true"
+        run: |
+          python .github/scripts/mutation_report.py --base "$BASE_SHA" --out mutation-report --timeout 1200
+          cat mutation-report/report.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mutation-report
+          path: mutation-report/
+          retention-days: 14

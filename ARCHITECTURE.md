@@ -82,24 +82,30 @@ what is forbidden.
   (`FLATHUNTER_*`) as well as YAML. Never hard-code credentials or URLs with tokens.
 - **Network in tests:** tests never hit real portals or APIs. Use
   `requests-mock`, fixtures in `test/crawler/fixtures/` and `test/utils/`.
-- **Typing:** new and changed code is type-annotated and must pass `pyright`.
+- **Typing:** new and changed code is fully type-annotated and passes `pyrefly` (strict).
 
 ## Quality gates
 
-Every pull request must pass, independent of who or what wrote it:
+Every pull request must pass, independent of who or what wrote it. The static gates
+are defined once in `.pre-commit-config.yaml` and run in three places: the agent loop
+(Claude Code hooks), the git pre-commit hook (prek) and CI. Legacy debt is frozen in
+line-independent baselines; new debt fails, and baselines may only shrink (ratchet).
 
-| Gate | Tool | Workflow |
+| Gate | Tool | Where (CI workflow) |
 |---|---|---|
-| Tests | `pytest` (via `coverage run`) | `tests.yml` |
+| Tests | `pytest` (+ Hypothesis property tests) | `tests.yml` |
 | Coverage of changed lines ≥ 80 % | `diff-cover` | `tests.yml` |
-| Lint | `pylint flathunter` | `linter.yml` |
-| Types | `pyright` | `types.yml` |
-| Architecture | `lint-imports` | `quality.yml` |
-| No weakened gates / suppressions / deleted tests | `.github/scripts/agent_guard.py` | `guard.yml` |
-| SAST | `bandit` (medium+) | `security.yml` |
+| Lint incl. security (S), complexity (C90, PLR) and suppression hygiene (PGH, RUF100) | Ruff, all rules, ratchet | `quality.yml` (prek) |
+| Formatting of new / clean files | `ruff format`, ratchet | `quality.yml` (prek) |
+| Types | Pyrefly strict, ratchet | `quality.yml` (prek) |
+| Cognitive complexity ≤ 15 | complexipy, snapshot ratchet | `quality.yml` (prek) |
+| Architecture | import-linter | `quality.yml` (prek) |
+| Imports match declared dependencies | deptry | `quality.yml` (prek) |
+| No weakened gates / suppressions / deleted tests / growing baselines | `.github/scripts/agent_guard.py` | `guard.yml` |
+| Test effectiveness (report, used by the reviewer) | mutmut on changed modules | `mutation.yml` |
 | No new vulnerable dependencies | `pip-audit` diffed against base | `security.yml` |
-| No secrets | `gitleaks` | `security.yml` |
-| Code scanning | CodeQL | `codeql.yml` |
+| No secrets | gitleaks | `security.yml` |
+| Code scanning | CodeQL (security-extended) | `codeql.yml` |
 
 ## Decisions
 
