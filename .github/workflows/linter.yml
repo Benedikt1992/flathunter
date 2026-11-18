@@ -18,6 +18,7 @@ on:
   push:
     branches:
       - 'main'
+      - 'fork-main'
   pull_request:
 
 ###############

@@ -380,6 +380,17 @@ $ pip install -e .
 
 to make the current project visible to your pip environment.
 
+Some tests are marked as `live`: they crawl the real property portals over the network. They are
+useful to detect layout changes on the portals, but they fail whenever a portal blocks the request
+(e.g. bot protection / captchas on CI runners). To run only the offline tests, use:
+
+```sh
+$ pytest -m "not live"
+```
+
+and `pytest -m live` to run only the live tests. In GitHub Actions the live tests run in a
+separate job that does not make the workflow fail.
+
 ## Maintainers
 
 This project is maintained by the members of the [Flat Hunters](https://github.com/flathunters) Github organisation, which is a collection of individual unpaid volunteers who have all had their own processes with flat-hunting in Germany. If you want to join, just ping one of us a message!
