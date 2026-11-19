@@ -114,7 +114,8 @@ Bei Widerspruch gilt die strengere Regel.
     diese Dateien sind wie `CLAUDE.md` geschützt. Die Änderung wird im PR vorgenommen und
     begründet, der Maintainer gibt sie mit `allow-protected-change` frei.
 13. **Bei echten Unklarheiten** oder einer Entscheidung, die über das Issue hinausgeht:
-    Frage stellen (`open_questions`) und stoppen, statt zu raten.
+    Frage stellen (der Workflow kommentiert sie als `open_questions` im Issue) und stoppen,
+    statt zu raten.
 
 ## Agent workflow
 
