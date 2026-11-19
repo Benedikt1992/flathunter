@@ -69,6 +69,53 @@ but legacy code is grandfathered: existing violations are frozen in baselines
 9. **When unsure:** do not guess requirements. Report open questions; the maintainer
    answers them.
 
+## Roadmap-Regeln für Implementierungs-Agents (aus Epic #1)
+
+Diese Regeln stammen aus dem Roadmap-Epic #1 und gelten zusätzlich zu den obigen.
+Bei Widerspruch gilt die strengere Regel.
+
+1. **Ein Issue = ein Branch = ein PR gegen `fork-main`.** Der Agent-Workflow arbeitet
+   auf `agent/issue-<nr>` und verknüpft den PR mit `Closes #<nr>`. Ein Issue wird erst
+   begonnen, wenn alle »Blockiert durch«-Issues geschlossen und deren PRs gemergt sind
+   (der Maintainer setzt `agent:ready` erst dann).
+2. **Zuerst lesen:** das Issue vollständig, `CLAUDE.md`, `ARCHITECTURE.md`, die im Issue
+   genannten Dateien. Die Kontext-Abschnitte beschreiben den Stand bei Erstellung der
+   Issues; bei Abweichungen gilt der aktuelle Code.
+3. **Umfang einhalten.** Nur was unter »Aufgaben« steht; »Nicht-Ziele« bleiben unberührt.
+   Fällt Zusatzarbeit auf, wird sie im PR benannt, nicht mit erledigt.
+4. **Nichts erfinden.** Selektoren, Endpunkte, Feldnamen und Fixtures stammen aus echten
+   Antworten des Portals. Ist ein Portal nicht erreichbar oder verlangt eine Anmeldung:
+   Draft-PR mit genauer Liste der fehlenden Fixtures samt `scripts/capture_fixture.py`-Aufruf,
+   dann stoppen (bzw. `status: blocked` mit dieser Liste melden).
+5. **Keine Außenwirkung.** Agents legen keine Konten an, inserieren nichts, senden keine
+   echten Bewerbungen, Nachrichten oder E-Mails und rufen in Tests keine kostenpflichtigen
+   APIs auf.
+6. **Tests offline.** Jede Änderung bringt Tests mit, die ohne Internet laufen. Tests mit
+   echtem Netzwerk tragen den Marker `live` (registriert in `pytest.ini`) und laufen nie
+   in der Pflicht-CI.
+7. **Qualität:** `prek run --all-files` (Ruff, Pyrefly strict, Komplexität,
+   Architekturverträge, deptry) und alle Offline-Tests grün; neue Verstöße werden behoben,
+   nie in eine Baseline aufgenommen. Überlebende Mutanten in geänderten Funktionen
+   (`mutation_report.py`) werden durch Tests getötet oder als äquivalent begründet.
+   Ergebnis im PR nennen.
+8. **Geheimnisse und personenbezogene Daten** stehen nie im Code, in Fixtures, im Log oder
+   im PR. Fixtures werden vor dem Commit von Namen, Telefonnummern und E-Mail-Adressen
+   echter Personen bereinigt.
+9. **Datenbankänderungen** nur über neue, nummerierte Migrationen; bestehende Migrationen
+   werden nie verändert.
+10. **Rücksicht gegenüber Portalen:** Alle Abrufe laufen über die Abruf-Schicht (#7) mit
+    ihren Limits. Bei einer Sperre wird nicht eskaliert, sondern pausiert und gemeldet.
+11. **Abhängigkeiten** nur, wenn das Issue sie vorsieht und sie auf `linux/arm64` ohne
+    Kompilieren installierbar sind; jede neue Abhängigkeit im PR begründen. `Pipfile`,
+    `Pipfile.lock` und `requirements-dev.txt` sind geschützt: Der Maintainer gibt die
+    Änderung mit dem Label `allow-protected-change` frei.
+12. **Dokumentation** im selben PR nachziehen (`docs/`, `config.yaml.dist`). Neue
+    Komponenten oder Abhängigkeitsregeln gehören nach `ARCHITECTURE.md` und `.importlinter`;
+    diese Dateien sind wie `CLAUDE.md` geschützt. Die Änderung wird im PR vorgenommen und
+    begründet, der Maintainer gibt sie mit `allow-protected-change` frei.
+13. **Bei echten Unklarheiten** oder einer Entscheidung, die über das Issue hinausgeht:
+    Frage stellen (`open_questions`) und stoppen, statt zu raten.
+
 ## Agent workflow
 
 The automated issue → PR process (labels, review loop, limits) is described in
