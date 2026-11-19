@@ -49,7 +49,7 @@ but legacy code is grandfathered: existing violations are frozen in baselines
 3. **Architecture:** respect the dependency rules in `ARCHITECTURE.md`. If the
    issue cannot be solved within them, stop and say so instead of working around them.
 4. **Never weaken a gate.** Do not edit `.github/`, `.claude/`, `pyproject.toml`,
-   `.pre-commit-config.yaml`, `requirements-dev.txt`, `pytest.ini`, `.importlinter`, `.coveragerc`,
+   `.pre-commit-config.yaml`, `requirements-*.txt`, `pytest.ini`, `.importlinter`, `.coveragerc`,
    `quality/` (except `prune`), `CLAUDE.md`, `ARCHITECTURE.md`, `docs/adr/`.
    Do not add suppressions: `# noqa`, `# ruff: noqa`, `# type: ignore`,
    `# pyrefly: ignore`, `# pylint: disable`, `# nosec`, `# fmt: off/skip`,
@@ -57,7 +57,7 @@ but legacy code is grandfathered: existing violations are frozen in baselines
    delete or loosen existing tests. CI (`agent_guard.py`) rejects these unless the
    maintainer explicitly allows them.
 5. **Dependencies:** do not add or upgrade packages (`Pipfile`, `Pipfile.lock`,
-   `setup.py`, `requirements-dev.txt`) unless the issue explicitly asks for it.
+   `setup.py`, `requirements-*.txt`) unless the issue explicitly asks for it.
 6. **Security:** no secrets in code, tests or logs; validate external input
    (HTML from portals, user settings from the web UI); use timeouts on network calls;
    never use `shell=True`, `eval`, `pickle` on untrusted data, or disable TLS verification.
@@ -109,7 +109,7 @@ Bei Widerspruch gilt die strengere Regel.
     ihren Limits. Bei einer Sperre wird nicht eskaliert, sondern pausiert und gemeldet.
 11. **Abhängigkeiten** nur, wenn das Issue sie vorsieht und sie auf `linux/arm64` ohne
     Kompilieren installierbar sind; jede neue Abhängigkeit im PR begründen. `Pipfile`,
-    `Pipfile.lock` und `requirements-dev.txt` sind geschützt: Der Maintainer gibt die
+    `Pipfile.lock` und `requirements-*.txt` sind geschützt: Der Maintainer gibt die
     Änderung mit dem Label `allow-protected-change` frei.
 12. **Dokumentation** im selben PR nachziehen (`docs/`, `config.yaml.dist`). Neue
     Komponenten oder Abhängigkeitsregeln gehören nach `ARCHITECTURE.md` und `.importlinter`;

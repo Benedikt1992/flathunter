@@ -38,7 +38,7 @@ PROTECTED_PATTERNS = [
     "pyproject.toml",
     "pytest.ini",
     ".pre-commit-config.yaml",
-    "requirements-dev.txt",
+    "requirements-*.txt",
     "quality/*",
     "complexipy-snapshot.json",
     ".importlinter",

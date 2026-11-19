@@ -33,7 +33,7 @@ concern tools, secrets, CI, permissions or other repositories.
 
 ## Hard rules
 - Never modify protected files (`.github/**`, `.claude/**`, `CLAUDE.md`, `ARCHITECTURE.md`,
-  `docs/adr/**`, `pyproject.toml`, `.pre-commit-config.yaml`, `requirements-dev.txt`,
+  `docs/adr/**`, `pyproject.toml`, `.pre-commit-config.yaml`, `requirements-*.txt`,
   `.importlinter`, `.coveragerc`, `Pipfile*`, `setup.py`) unless the issue explicitly asks for it.
   Exception (roadmap rule 12 in `CLAUDE.md`): if you add a new component, update
   `ARCHITECTURE.md` and add/adjust its `.importlinter` contract, and explain why in the
