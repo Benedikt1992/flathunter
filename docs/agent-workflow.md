@@ -6,6 +6,7 @@ does the final review and merge. Rationale: [ADR 0001](adr/0001-agent-driven-dev
 
 ```
 Issue ──(maintainer: agent:plan)──► Planner ──► plan comment ──┐  (optional)
+  │   "Blockiert durch" still open? → agent:waiting, auto-start when they close
   │                                                            │
   └──(maintainer: agent:ready)◄────────────────────────────────┘
         ▼
@@ -30,6 +31,7 @@ Issue ──(maintainer: agent:plan)──► Planner ──► plan comment ─
 | You want to… | Do this |
 |---|---|
 | Have an issue implemented | Write it with the **Task** template (clear acceptance criteria!), add `agent:ready` |
+| Work through a series of dependent issues | Add `agent:ready` to all of them. Issues whose `Blockiert durch:` / `Blocked by:` issues are still open wait (`agent:waiting`) and start automatically, lowest number first, once those are closed |
 | See the approach first (larger issues) | Add `agent:plan`, read the plan, then add `agent:ready` (or comment and re-add `agent:plan`) |
 | Answer an agent's open questions (`agent:blocked`) | Comment on the issue, re-add `agent:ready` |
 | Review a finished PR | PRs labelled `needs-human` request your review. Use "Files changed → Changes since your last review" in later rounds |
@@ -55,6 +57,7 @@ criteria, non-goals, hints on the approach), and restart with `agent:plan`.
 | `agent:plan` | you | write a plan for this issue |
 | `agent:plan-ready` | agent | plan posted |
 | `agent:ready` | you | implement this issue |
+| `agent:waiting` | agent | waiting for the issues in `Blockiert durch` to be closed |
 | `agent:queued` | agent | waiting for a free slot (`AGENT_MAX_PARALLEL`) |
 | `agent:in-progress` | agent | an agent is working |
 | `agent:blocked` | agent | open questions for you |
@@ -132,6 +135,18 @@ Actions → **Agent · Setup** → Run workflow.
 Good first issue: *"Update dependencies with known vulnerabilities"* (the Security
 workflow's weekly report lists them). Note that this touches `Pipfile.lock`, so add
 `allow-protected-change` to the PR.
+
+## Dependencies between issues
+
+Issues declare their predecessors in the first line, e.g.
+`… · Blockiert durch: #6, #7 · …` (also `Blocked by:`, ranges like `(#2–#33)`).
+`agent-implement.yml` checks them before any work starts (`agent_ops.py check-blockers`):
+if one is still open, the issue gets `agent:waiting` and a single comment. `agent-queue.yml`
+runs whenever an issue is closed or an agent PR finishes (and manually) and starts every
+waiting or queued `agent:ready` issue whose predecessors are all closed, lowest number first,
+up to `AGENT_MAX_PARALLEL` active tasks. A closed predecessor counts as done whatever the
+close reason; if you close one as "not planned", check its dependents. Text without issue
+numbers (e.g. "Merge des Agent-Setups") is not checked.
 
 ## Quality gates in the agent loop
 

@@ -176,3 +176,55 @@ def test_human_feedback_filters_threads():
     assert body == "Please rename"
     assert len(threads) == 1 and threads[0]["reply_to_id"] == 1
     assert [c["body"] for c in threads[0]["conversation"]] == ["rename x"]
+
+
+HEADER = "**Phase 2 \u2013 Portale** · Umfang: M · Blockiert durch: {} · Teil von #1\n\n## Kontext\nsee #99"
+
+
+def test_parse_blockers_real_issue_formats():
+    assert ops.parse_blockers(HEADER.format("#6, #7, #9")) == [6, 7, 9]
+    assert ops.parse_blockers(HEADER.format("#25")) == [25]
+    assert ops.parse_blockers(HEADER.format("alle vorherigen Issues (#2\u2013#33)"), 34) == list(
+        range(2, 34)
+    )
+    assert ops.parse_blockers(HEADER.format("Merge des Agent-Setups (Branch `x`)")) == []
+    assert ops.parse_blockers(HEADER.format("\u2013")) == []
+
+
+def test_parse_blockers_ignores_other_references_and_self():
+    body = "**Querschnitt** · Umfang: M · Bezug: #2, #9\n\nBlockiert durch #5 in prose"
+    assert ops.parse_blockers(body) == []
+    assert ops.parse_blockers("Blocked by: #3, #4", own_number=4) == [3]
+    assert ops.parse_blockers(None) == []
+
+
+def test_parse_blockers_caps_huge_ranges():
+    assert len(ops.parse_blockers("Blockiert durch: #1\u2013#100000")) == ops.MAX_RANGE + 1
+
+
+def issue(number, *labels):
+    return {"number": number, "labels": [{"name": name} for name in labels]}
+
+
+def test_select_startable_respects_order_blockers_and_slots():
+    candidates = [
+        issue(12, "agent:ready", "agent:waiting"),
+        issue(10, "agent:ready", "agent:waiting"),
+        issue(11, "agent:ready", "agent:queued"),
+        issue(13, "agent:ready", "agent:waiting"),
+    ]
+    blockers = {10: [], 11: [9], 12: [], 13: []}
+    assert ops.select_startable(candidates, blockers, free_slots=2) == [10, 12]
+    assert ops.select_startable(candidates, blockers, free_slots=0) == []
+    assert ops.select_startable(candidates, blockers, free_slots=-1) == []
+
+
+def test_select_startable_skips_unapproved_or_active_issues():
+    candidates = [
+        issue(1, "agent:waiting"),  # maintainer removed agent:ready
+        issue(2, "agent:ready", "agent:waiting", "agent:in-progress"),  # already dispatched
+        issue(3, "agent:ready", "agent:waiting", "agent:blocked"),  # open questions
+        issue(4, "agent:ready"),  # never waited: started directly by the label event
+        issue(5, "agent:ready", "agent:queued"),
+    ]
+    assert ops.select_startable(candidates, {}, free_slots=5) == [5]

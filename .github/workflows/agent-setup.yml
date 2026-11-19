@@ -23,6 +23,7 @@ jobs:
           agent:plan-ready|c5def5|Agent plan posted, waiting for the maintainer
           agent:ready|0e8a16|Maintainer: let an agent implement this issue
           agent:queued|fbca04|Waiting for a free agent slot
+          agent:waiting|fbca04|Waiting for the issues in "Blockiert durch" to be closed
           agent:in-progress|1d76db|An agent is working on this
           agent:blocked|d93f0b|Agent needs answers from the maintainer
           agent:stuck|b60205|Agent workflow failed or ran out of rounds

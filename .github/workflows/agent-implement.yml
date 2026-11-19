@@ -48,7 +48,23 @@ jobs:
       - name: Verify the maintainer approved this issue
         run: python3 .github/scripts/agent_ops.py verify-label "$ISSUE" agent:ready
 
+      - name: Check "Blockiert durch" (all blocking issues must be closed)
+        id: deps
+        run: python3 .github/scripts/agent_ops.py check-blockers "$ISSUE"
+
+      - name: Blocked → wait (agent-queue.yml starts it once the blockers are closed)
+        if: steps.deps.outputs.ok != 'true'
+        env:
+          OPEN: ${{ steps.deps.outputs.open }}
+        run: |
+          labels=$(gh issue view "$ISSUE" --json labels --jq '.labels[].name')
+          if ! grep -qx 'agent:waiting' <<< "$labels"; then
+            gh issue comment "$ISSUE" --body "⏳ Waiting for blocking issues: $OPEN. Work starts automatically once they are closed."
+          fi
+          gh issue edit "$ISSUE" --add-label agent:waiting --remove-label agent:queued --remove-label agent:in-progress || true
+
       - name: Check work-in-progress limit and existing branch
+        if: steps.deps.outputs.ok == 'true'
         id: gate
         run: |
           branch="agent/issue-${ISSUE}"
@@ -56,14 +72,15 @@ jobs:
             gh issue comment "$ISSUE" --body "Branch \`$branch\` already exists, so an agent is already working on this issue. Remove the branch or the open PR to start over."
             echo "go=false" >> "$GITHUB_OUTPUT"; exit 0
           fi
-          open=$(gh pr list --state open --limit 100 --json headRefName \
-                 --jq '[.[] | select(.headRefName | startswith("agent/"))] | length')
-          if [ "$open" -ge "$MAX_PARALLEL" ]; then
-            gh issue edit "$ISSUE" --add-label agent:queued
-            gh issue comment "$ISSUE" --body "Queued: $open agent PRs are open (limit $MAX_PARALLEL). Work starts automatically when one is merged or closed."
+          # Active agent work = other open issues labelled agent:in-progress (implementing or PR open).
+          active=$(gh issue list --state open --label agent:in-progress --limit 100 --json number \
+                   --jq "[.[] | select(.number != ${ISSUE})] | length")
+          if [ "$active" -ge "$MAX_PARALLEL" ]; then
+            gh issue edit "$ISSUE" --add-label agent:queued --remove-label agent:in-progress --remove-label agent:waiting || true
+            gh issue comment "$ISSUE" --body "Queued: $active agent tasks are active (limit $MAX_PARALLEL). Work starts automatically when one finishes."
             echo "go=false" >> "$GITHUB_OUTPUT"; exit 0
           fi
-          gh issue edit "$ISSUE" --add-label agent:in-progress --remove-label agent:queued || true
+          gh issue edit "$ISSUE" --add-label agent:in-progress --remove-label agent:queued --remove-label agent:waiting || true
           echo "go=true" >> "$GITHUB_OUTPUT"
           echo "branch=$branch" >> "$GITHUB_OUTPUT"
 

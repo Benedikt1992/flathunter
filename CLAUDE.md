@@ -76,8 +76,10 @@ Bei Widerspruch gilt die strengere Regel.
 
 1. **Ein Issue = ein Branch = ein PR gegen `fork-main`.** Der Agent-Workflow arbeitet
    auf `agent/issue-<nr>` und verknüpft den PR mit `Closes #<nr>`. Ein Issue wird erst
-   begonnen, wenn alle »Blockiert durch«-Issues geschlossen und deren PRs gemergt sind
-   (der Maintainer setzt `agent:ready` erst dann).
+   begonnen, wenn alle »Blockiert durch«-Issues geschlossen und deren PRs gemergt sind.
+   Der Workflow prüft das automatisch: Mit `agent:ready` markierte Issues warten
+   (`agent:waiting`) und starten von selbst in Nummernfolge, sobald alle Vorgänger
+   geschlossen sind.
 2. **Zuerst lesen:** das Issue vollständig, `CLAUDE.md`, `ARCHITECTURE.md`, die im Issue
    genannten Dateien. Die Kontext-Abschnitte beschreiben den Stand bei Erstellung der
    Issues; bei Abweichungen gilt der aktuelle Code.
