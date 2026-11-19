@@ -84,7 +84,9 @@ def mutant_location(name: str) -> tuple[str, str]:
 
 def failing_tests() -> list[str]:
     """Node ids of tests that fail before any mutation."""
-    out = run([sys.executable, "-m", "pytest", "-q", "-rfE", "-p", "no:cacheprovider"]).stdout
+    out = run(
+        [sys.executable, "-m", "pytest", "-q", "-rfE", "-p", "no:cacheprovider", "-m", "not live"]
+    ).stdout
     return sorted(set(re.findall(r"^(?:FAILED|ERROR) (\S+)", out, re.MULTILINE)))
 
 
@@ -96,7 +98,7 @@ def also_copy() -> list[str]:
 
 def mutmut_section(paths: list[str], deselect: list[str]) -> str:
     """A [tool.mutmut] section mutating `paths` and skipping `deselect`."""
-    args: list[str] = []
+    args: list[str] = ["-m", "not live"]  # never mutate against the real portals
     for node in deselect:
         args += ["--deselect", node]
     return (

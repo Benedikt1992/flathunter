@@ -16,6 +16,7 @@ def crawler():
     return Immowelt(StringConfig(string=DUMMY_CONFIG))
 
 
+@pytest.mark.live
 def test_crawler(crawler):
     soup = crawler.get_page(TEST_URL)
     assert soup is not None
@@ -31,6 +32,7 @@ def test_dont_crawl_other_urls(crawler):
     exposes = crawler.crawl("https://www.example.com")
     assert count(exposes) == 0
 
+@pytest.mark.live
 def test_process_expose_fetches_details(crawler):
     soup = crawler.get_page(TEST_URL)
     assert soup is not None

@@ -89,6 +89,4 @@ DEP003 = ["google"]   # google.cloud.firestore comes with firebase-admin
 firebase-admin = ["firebase_admin", "google"]
 "ruamel.yaml" = ["ruamel"]
 
-# --------------------------------------------------------------------------- pytest
-[tool.pytest.ini_options]
-testpaths = ["test"]
+# pytest is configured in pytest.ini (marker `live` for tests that hit real portals).

@@ -36,6 +36,7 @@ PROTECTED_PATTERNS = [
     ".github/*",
     ".claude/*",
     "pyproject.toml",
+    "pytest.ini",
     ".pre-commit-config.yaml",
     "requirements-dev.txt",
     "quality/*",

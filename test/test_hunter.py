@@ -1,3 +1,4 @@
+import pytest
 import unittest
 import re
 from typing import Optional, Dict, List
@@ -109,6 +110,7 @@ excluded_titles:
   - "zwischenmiete"
 """
 
+    @pytest.mark.live
     def test_hunt_flats(self):
         config = StringConfig(string=self.DUMMY_CONFIG)
         config.set_searchers([Immowelt(config)])

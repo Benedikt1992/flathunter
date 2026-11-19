@@ -7,6 +7,7 @@ on:
   push:
     branches:
       - 'main'
+      - 'fork-main'
   pull_request:
 
 jobs:
@@ -16,6 +17,7 @@ jobs:
     environment: test
 
     strategy:
+      fail-fast: false
       matrix:
         python-version: ["3.10", "3.11"]
 
@@ -38,7 +40,9 @@ jobs:
           pipenv requirements > requirements.txt
           pip install -r requirements.txt -r requirements-dev.txt
       - name: Run tests
-        run: coverage run
+        # Tests marked "live" fetch the real property portals and are run
+        # in the separate, non-blocking "live-tests" job below.
+        run: coverage run -m pytest -m "not live"
         env:
           FLATHUNTER_HEADLESS_BROWSER: true
           FLATHUNTER_CAPMONSTER_KEY: ${{ secrets.CAPMONSTER_API_KEY }}
@@ -54,3 +58,54 @@ jobs:
       - name: Run codecov
         if: ${{ success() }}
         uses: codecov/codecov-action@v3
+
+  live-tests:
+    # Crawls the real property portals. These regularly fail on GitHub runners
+    # (bot protection / captchas, site layout changes), so this job is
+    # informational only: failures are reported as warnings and in the job
+    # summary, but the job itself stays green.
+    name: Live portal tests
+    runs-on: ubuntu-latest
+    environment: test
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+      - uses: browser-actions/setup-chrome@latest
+        with:
+          chrome-version: stable
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install pipenv
+          pipenv requirements > requirements.txt
+          pip install -r requirements.txt
+      - name: Run live tests
+        id: live
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          pytest -m live -rf test 2>&1 | tee live-tests.log
+        env:
+          FLATHUNTER_HEADLESS_BROWSER: true
+          FLATHUNTER_CAPMONSTER_KEY: ${{ secrets.CAPMONSTER_API_KEY }}
+          WDM_LOCAL: 1
+          CHROMIUM_BIN: /opt/hostedtoolcache/chromium/stable/x64/chrome
+      - name: Report failing live tests
+        if: steps.live.outcome == 'failure'
+        run: |
+          {
+            echo "## Failing live portal tests"
+            echo
+            echo "Informational only - usually bot protection or a changed portal layout."
+            echo
+            echo '```'
+            grep -E '^(FAILED|ERROR) [^ ]+::' live-tests.log || echo "pytest failed, see the 'Run live tests' log"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          grep -E '^(FAILED|ERROR) [^ ]+::' live-tests.log | cut -c1-200 | while read -r line; do
+            echo "::warning title=Live portal test::$line"
+          done || true

@@ -49,7 +49,7 @@ but legacy code is grandfathered: existing violations are frozen in baselines
 3. **Architecture:** respect the dependency rules in `ARCHITECTURE.md`. If the
    issue cannot be solved within them, stop and say so instead of working around them.
 4. **Never weaken a gate.** Do not edit `.github/`, `.claude/`, `pyproject.toml`,
-   `.pre-commit-config.yaml`, `requirements-dev.txt`, `.importlinter`, `.coveragerc`,
+   `.pre-commit-config.yaml`, `requirements-dev.txt`, `pytest.ini`, `.importlinter`, `.coveragerc`,
    `quality/` (except `prune`), `CLAUDE.md`, `ARCHITECTURE.md`, `docs/adr/`.
    Do not add suppressions: `# noqa`, `# ruff: noqa`, `# type: ignore`,
    `# pyrefly: ignore`, `# pylint: disable`, `# nosec`, `# fmt: off/skip`,
