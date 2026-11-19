@@ -38,7 +38,7 @@ jobs:
           pip install pipenv
           python --version; pip --version; pipenv --version
           pipenv requirements > requirements.txt
-          pip install -r requirements.txt -r requirements-test.txt
+          pip install --src "$RUNNER_TEMP/pip-src" -r requirements.txt -r requirements-test.txt
       - name: Run tests
         # Tests marked "live" fetch the real property portals and are run
         # in the separate, non-blocking "live-tests" job below.
@@ -82,7 +82,7 @@ jobs:
           pip install --upgrade pip
           pip install pipenv
           pipenv requirements > requirements.txt
-          pip install -r requirements.txt
+          pip install --src "$RUNNER_TEMP/pip-src" -r requirements.txt
       - name: Run live tests
         id: live
         continue-on-error: true

@@ -112,7 +112,7 @@ jobs:
         run: |
           pip install --upgrade pip pipenv
           pipenv requirements > "$RUNNER_TEMP/requirements.txt"
-          pip install -r "$RUNNER_TEMP/requirements.txt" -r requirements-dev.txt
+          pip install --src "$RUNNER_TEMP/pip-src" -r "$RUNNER_TEMP/requirements.txt" -r requirements-dev.txt
 
       - name: Prepare branch and context
         if: steps.gate.outputs.go == 'true'
