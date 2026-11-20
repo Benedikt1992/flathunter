@@ -109,7 +109,10 @@ Settings → Secrets and variables → Actions:
 | Variable (optional) | `AGENT_MAINTAINER` | your login (default: repository owner) |
 | Variable (optional) | `AGENT_MAX_PARALLEL` | open agent PRs at a time (default 2) |
 | Variable (optional) | `AGENT_MAX_ROUNDS` | automatic fix rounds per PR (default 3) |
-| Variable (optional) | `AGENT_IMPLEMENT_MODEL` / `AGENT_REVIEW_MODEL` | model ids (default `claude-opus-5-5`); using a different model for review decorrelates mistakes |
+| Variable (optional) | `AGENT_PLAN_MODEL` | model for the planner (default `claude-opus-5-5`) |
+| Variable (optional) | `AGENT_IMPLEMENT_MODEL` | model for the implementer (default `claude-sonnet-5-5`) |
+| Variable (optional) | `AGENT_REVIEW_MODEL` | model for the independent reviewer (default `claude-opus-5-5`); a different model than the implementer decorrelates mistakes |
+| Variable (optional) | `AGENT_FIX_MODEL` | model for fix rounds (default `claude-sonnet-5-5`) |
 
 ### 4. Actions settings
 Settings → Actions → General:
