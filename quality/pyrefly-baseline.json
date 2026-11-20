@@ -505,6 +505,20 @@
       "severity": "error"
     },
     {
+      "column": 19,
+      "path": "flathunter/crawler/kleinanzeigen.py",
+      "name": "implicit-any-empty-container",
+      "concise_description": "Cannot infer type of empty container; it will be treated as containing `Any`",
+      "severity": "error"
+    },
+    {
+      "column": 36,
+      "path": "flathunter/crawler/kleinanzeigen.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`_parse_legacy_aditem` is missing an annotation for parameter `expose`",
+      "severity": "error"
+    },
+    {
       "column": 28,
       "path": "flathunter/crawler/kleinanzeigen.py",
       "name": "implicit-any-parameter",
@@ -541,6 +555,20 @@
     },
     {
       "column": 73,
+      "path": "flathunter/crawler/wggesucht.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_VT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 72,
+      "path": "flathunter/crawler/wggesucht.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_KT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 72,
       "path": "flathunter/crawler/wggesucht.py",
       "name": "implicit-any-type-argument",
       "concise_description": "Cannot determine the type parameter `_VT` for generic class `dict[_KT, _VT]`",

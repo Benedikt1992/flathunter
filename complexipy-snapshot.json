@@ -24,8 +24,8 @@
     "file_name": "kleinanzeigen.py",
     "functions": [
       {
-        "name": "Kleinanzeigen::extract_data",
-        "complexity": 16
+        "name": "Kleinanzeigen::_parse_card",
+        "complexity": 18
       }
     ]
   },

@@ -116,3 +116,6 @@ requirements.txt
 # Mutation testing (mutmut) working dirs and reports
 mutants/
 mutation-report/
+
+# pip checkouts of editable VCS dependencies (-e git+...) when installed outside a venv
+src/

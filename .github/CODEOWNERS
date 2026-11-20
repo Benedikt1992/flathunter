@@ -11,8 +11,9 @@
 /.importlinter        @Benedikt1992
 /.claude/             @Benedikt1992
 /pyproject.toml       @Benedikt1992
+/pytest.ini           @Benedikt1992
 /.pre-commit-config.yaml @Benedikt1992
-/requirements-dev.txt @Benedikt1992
+/requirements-*.txt  @Benedikt1992
 /quality/             @Benedikt1992
 /complexipy-snapshot.json @Benedikt1992
 /.coveragerc          @Benedikt1992

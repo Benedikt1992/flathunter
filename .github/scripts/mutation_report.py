@@ -24,7 +24,12 @@ import re
 import subprocess
 import sys
 from collections import Counter
+from contextlib import contextmanager
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterator
 
 ROOT = Path(__file__).resolve().parents[2]
 PYPROJECT = ROOT / "pyproject.toml"
@@ -84,40 +89,59 @@ def mutant_location(name: str) -> tuple[str, str]:
 
 def failing_tests() -> list[str]:
     """Node ids of tests that fail before any mutation."""
-    out = run([sys.executable, "-m", "pytest", "-q", "-rfE", "-p", "no:cacheprovider"]).stdout
+    out = run(
+        [sys.executable, "-m", "pytest", "-q", "-rfE", "-p", "no:cacheprovider", "-m", "not live"]
+    ).stdout
     return sorted(set(re.findall(r"^(?:FAILED|ERROR) (\S+)", out, re.MULTILINE)))
 
 
 def also_copy() -> list[str]:
     """Everything the tests import or read besides the mutated files."""
     extra = [*sorted(p.name for p in ROOT.glob("*.py")), "config.yaml.dist"]
-    return ["flathunter/", *[name for name in extra if (ROOT / name).exists()]]
+    return ["flathunter/", "test/", *[name for name in extra if (ROOT / name).exists()]]
 
 
 def mutmut_section(paths: list[str], deselect: list[str]) -> str:
     """A [tool.mutmut] section mutating `paths` and skipping `deselect`."""
-    args: list[str] = []
+    args: list[str] = ["-m", "not live"]  # never mutate against the real portals
     for node in deselect:
         args += ["--deselect", node]
     return (
         "\n[tool.mutmut]\n"
-        f"paths_to_mutate = {json.dumps(paths)}\n"
-        'tests_dir = ["test/"]\n'
+        f"source_paths = {json.dumps(paths)}\n"
         f"also_copy = {json.dumps(also_copy())}\n"
+        'pytest_add_cli_args_test_selection = ["test/"]\n'
         f"pytest_add_cli_args = {json.dumps(args)}\n"
     )
 
 
-def run_mutmut(paths: list[str], deselect: list[str], timeout: int) -> bool:
-    """Run mutmut with a temporary config; False if it timed out.
+@contextmanager
+def temporary_config(original: str) -> Iterator[Callable[[str], None]]:
+    """Yield a writer for a temporary [tool.mutmut] section; restore pyproject.toml afterwards.
+
+    mutmut needs the section for `run` as well as for `results` and `show`.
+    """
+
+    def write(section: str) -> None:
+        PYPROJECT.write_text(original + section, encoding="utf-8")
+
+    try:
+        yield write
+    finally:
+        PYPROJECT.write_text(original, encoding="utf-8")
+
+
+def run_mutmut(
+    paths: list[str], deselect: list[str], timeout: int, write: Callable[[str], None]
+) -> bool:
+    """Run mutmut; False if it timed out.
 
     Tests that only fail inside mutmut's sandbox (e.g. path-dependent ones) abort its
     baseline run; they are added to `deselect` and the run is retried.
     """
-    original = PYPROJECT.read_text(encoding="utf-8")
     try:
         for _attempt in range(3):
-            PYPROJECT.write_text(original + mutmut_section(paths, deselect), encoding="utf-8")
+            write(mutmut_section(paths, deselect))
             result = run(["mutmut", "run", "--max-children", "4"], timeout=timeout)
             if result.returncode == 0:
                 return True
@@ -128,8 +152,6 @@ def run_mutmut(paths: list[str], deselect: list[str], timeout: int) -> bool:
             deselect.extend(node for node in failed if node not in deselect)
     except subprocess.TimeoutExpired:
         return False
-    finally:
-        PYPROJECT.write_text(original, encoding="utf-8")
     return True
 
 
@@ -199,10 +221,12 @@ def main() -> int:
             for path in paths
         }
         deselect = failing_tests()
-        if not run_mutmut(paths, deselect, args.timeout):
-            lines.append(f"Warning: mutmut stopped after {args.timeout}s; results are partial.")
-        statuses, relevant = classify(run(["mutmut", "results", "--all", "true"]).stdout, touched)
-        lines += render(statuses, relevant, len(deselect))
+        with temporary_config(PYPROJECT.read_text(encoding="utf-8")) as write:
+            if not run_mutmut(paths, deselect, args.timeout, write):
+                lines.append(f"Warning: mutmut stopped after {args.timeout}s; partial results.")
+            results = run(["mutmut", "results", "--all", "true"]).stdout
+            statuses, relevant = classify(results, touched)
+            lines += render(statuses, relevant, len(deselect))
         summary = {
             "files": {path: dict(counts) for path, counts in statuses.items()},
             "changed_function_survivors": relevant,

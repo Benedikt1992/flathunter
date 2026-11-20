@@ -122,7 +122,7 @@ jobs:
         run: |
           pip install --upgrade pip pipenv
           pipenv requirements --dev > "$RUNNER_TEMP/requirements.txt"
-          pip install -r "$RUNNER_TEMP/requirements.txt" -r requirements-dev.txt
+          pip install --src "$RUNNER_TEMP/pip-src" -r "$RUNNER_TEMP/requirements.txt" -r requirements-dev.txt
 
       - name: Fix
         if: steps.rounds.outputs.go == 'true'
@@ -143,7 +143,7 @@ jobs:
             The feedback and the original issue are in `.agent/context.md`.
             The PR branch is checked out.
           claude_args: |
-            --model ${{ vars.AGENT_IMPLEMENT_MODEL || 'claude-opus-5-5' }}
+            --model ${{ vars.AGENT_FIX_MODEL || 'claude-sonnet-5-5' }}
             --max-turns 80
             --allowedTools "Read,Edit,Write,Glob,Grep,TodoWrite,Bash(python -m pytest:*),Bash(pytest:*),Bash(coverage:*),Bash(ruff:*),Bash(pyrefly check:*),Bash(complexipy:*),Bash(lint-imports:*),Bash(prek run:*),Bash(python .github/scripts/ratchet.py ruff:*),Bash(python .github/scripts/ratchet.py format:*),Bash(python .github/scripts/ratchet.py prune),Bash(python .github/scripts/mutation_report.py:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git add:*),Bash(git commit:*),Bash(ls:*)"
             --disallowedTools "Bash(git push:*),Bash(git rebase:*),Bash(git reset:*),Bash(git commit --amend:*),Bash(gh:*),Bash(curl:*),Bash(wget:*),Bash(pip:*),WebFetch,WebSearch"

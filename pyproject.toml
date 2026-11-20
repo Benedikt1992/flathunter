@@ -11,7 +11,7 @@
 [tool.ruff]
 target-version = "py310"
 line-length = 100
-extend-exclude = ["chrome_driver_install.py"]
+extend-exclude = ["chrome_driver_install.py", "src"]  # src/: pip checkouts of `-e git+` deps
 
 [tool.ruff.lint]
 select = ["ALL"]
@@ -54,7 +54,11 @@ strict = true
 # quality/pyrefly-baseline.json; new code must type-check strictly.
 [tool.pyrefly]
 project-includes = ["flathunter", "test", "*.py"]
-project-excludes = ["chrome_driver_install.py", "**/node_modules", "**/__pycache__", "**/.*"]
+project-excludes = ["chrome_driver_install.py", "src/**", "**/node_modules", "**/__pycache__", "**/.*"]
+# The repo root is the import root. Without this, a ./src directory (pip puts `-e git+`
+# checkouts there when installing outside a venv) is mistaken for a src layout.
+search-path = ["."]
+disable-search-path-heuristics = true
 preset = "strict"
 python-version = "3.10"
 baseline = "quality/pyrefly-baseline.json"
@@ -74,7 +78,7 @@ implicit-any-parameter = "ignore"   # pytest fixtures
 # and every declared dependency must be imported (DEP002). Test and type-check
 # dependencies live in [dev-packages], which this check does not read.
 [tool.deptry]
-extend_exclude = ["test", "\\.github", "chrome_driver_install\\.py"]
+extend_exclude = ["test", "\\.github", "chrome_driver_install\\.py", "src"]
 
 [tool.deptry.per_rule_ignores]
 # Needed at runtime, but never imported by the scanned code.
@@ -89,6 +93,4 @@ DEP003 = ["google"]   # google.cloud.firestore comes with firebase-admin
 firebase-admin = ["firebase_admin", "google"]
 "ruamel.yaml" = ["ruamel"]
 
-# --------------------------------------------------------------------------- pytest
-[tool.pytest.ini_options]
-testpaths = ["test"]
+# pytest is configured in pytest.ini (marker `live` for tests that hit real portals).

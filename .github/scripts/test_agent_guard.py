@@ -68,6 +68,7 @@ def test_protected_patterns():
     assert guard.is_protected(".github/workflows/agent-review.yml")
     assert guard.is_protected("docs/adr/0001-x.md")
     assert guard.is_protected("Pipfile.lock")
+    assert guard.is_protected("requirements-test.txt")
     assert not guard.is_protected("flathunter/config.py")
     assert not guard.is_protected("docs/agent-workflow.md")
 

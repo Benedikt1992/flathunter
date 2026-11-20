@@ -107,6 +107,7 @@ def test_url_conversion(crawler, test_url, test_api_url):
     api_url = crawler.compose_api_url(query)
     assert api_url == test_api_url
 
+@pytest.mark.live
 @pytest.mark.parametrize("test_api_url", TEST_API_URLS)
 def test_api_response(crawler, test_api_url):
   response = crawler.fetch_api_data(test_api_url)
@@ -114,6 +115,7 @@ def test_api_response(crawler, test_api_url):
   # throttle to not flood api
   sleep(1)
 
+@pytest.mark.live
 def test_extract_data_from_response(crawler):
   entries = crawler.get_results(crawler.config.target_urls()[0])
   required_keys = {

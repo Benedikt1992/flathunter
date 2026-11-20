@@ -53,6 +53,6 @@ def test_classify_separates_changed_functions():
 
 def test_mutmut_section_deselects_failing_tests():
     section = mr.mutmut_section(["flathunter/filter.py"], ["test/a.py::t"])
-    assert 'paths_to_mutate = ["flathunter/filter.py"]' in section
-    assert '["--deselect", "test/a.py::t"]' in section
+    assert 'source_paths = ["flathunter/filter.py"]' in section
+    assert '["-m", "not live", "--deselect", "test/a.py::t"]' in section
     assert '"flathunter/"' in section

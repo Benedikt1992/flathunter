@@ -203,6 +203,46 @@ def count_fix_rounds(comments: list[dict]) -> int:
     )
 
 
+BLOCKER_LINE = re.compile(
+    r"(?:Blockiert durch|Blocked by):\s*(.*?)(?:\s+·|$)", re.IGNORECASE | re.MULTILINE
+)
+ISSUE_RANGE = re.compile(r"#(\d+)\s*[\u2013\u2014-]\s*#(\d+)")
+ISSUE_REF = re.compile(r"#(\d+)")
+MAX_RANGE = 200
+ACTIVE_LABELS = {"agent:in-progress", "agent:blocked", "agent:stuck"}
+PENDING_LABELS = {"agent:waiting", "agent:queued"}
+
+
+def parse_blockers(body: str | None, own_number: int | None = None) -> list[int]:
+    """Issue numbers from the "Blockiert durch:" / "Blocked by:" header (ranges expanded)."""
+    match = BLOCKER_LINE.search(body or "")
+    if not match:
+        return []
+    text = match.group(1)
+    numbers: set[int] = set()
+    for start, end in ISSUE_RANGE.findall(text):
+        low, high = sorted((int(start), int(end)))
+        numbers.update(range(low, min(high, low + MAX_RANGE) + 1))
+    numbers.update(int(n) for n in ISSUE_REF.findall(ISSUE_RANGE.sub(" ", text)))
+    numbers.discard(own_number or -1)
+    return sorted(numbers)
+
+
+def select_startable(
+    candidates: list[dict], open_blockers: dict[int, list[int]], free_slots: int
+) -> list[int]:
+    """Issues to start now: pending, unblocked, lowest number first, at most `free_slots`."""
+    startable = []
+    for issue in sorted(candidates, key=lambda i: i["number"]):
+        labels = {label["name"] for label in issue.get("labels", [])}
+        if "agent:ready" not in labels or labels & ACTIVE_LABELS or not labels & PENDING_LABELS:
+            continue
+        if open_blockers.get(issue["number"]):
+            continue
+        startable.append(issue["number"])
+    return startable[: max(free_slots, 0)]
+
+
 # --------------------------------------------------------------------------- commands
 
 
@@ -454,6 +494,41 @@ def cmd_count_rounds(args) -> int:
     return 0
 
 
+def open_blockers_of(number: int, body: str | None, cache: dict[int, str]) -> list[int]:
+    """Blocking issues of `number` that are not closed yet (states cached across calls)."""
+    still_open = []
+    for blocker in parse_blockers(body, number):
+        if blocker not in cache:
+            cache[blocker] = gh_json(f"repos/{repo()}/issues/{blocker}").get("state", "open")
+        if cache[blocker] != "closed":
+            still_open.append(blocker)
+    return still_open
+
+
+def cmd_check_blockers(args: argparse.Namespace) -> int:
+    """Output ok=true|false and open=<#a, #b> for an issue's "Blockiert durch" list."""
+    issue = gh_json(f"repos/{repo()}/issues/{args.issue}")
+    still_open = open_blockers_of(args.issue, issue.get("body"), {})
+    set_output("ok", "false" if still_open else "true")
+    set_output("open", ", ".join(f"#{n}" for n in still_open))
+    return 0
+
+
+def cmd_next_startable(args: argparse.Namespace) -> int:
+    """Output issues=<n m ...>: waiting/queued issues whose blockers are closed, within the WIP limit."""
+    issues = gh_json(f"repos/{repo()}/issues?state=open&per_page=100", "--paginate")
+    issues = [i for i in issues if "pull_request" not in i]
+    active = sum(
+        1 for i in issues if "agent:in-progress" in {label["name"] for label in i["labels"]}
+    )
+    cache: dict[int, str] = {}
+    pending = [i for i in issues if {label["name"] for label in i["labels"]} & PENDING_LABELS]
+    blockers = {i["number"]: open_blockers_of(i["number"], i.get("body"), cache) for i in pending}
+    startable = select_startable(pending, blockers, args.max_parallel - active)
+    set_output("issues", " ".join(str(n) for n in startable))
+    return 0
+
+
 def cmd_post_review(args) -> int:
     """Post the reviewer's structured result as a PR review; output verdict."""
     with open(args.result, encoding="utf-8") as handle:
@@ -564,6 +639,14 @@ def main() -> int:
     p.add_argument("pr", type=int)
     p.add_argument("--max", type=int, default=3)
     p.set_defaults(func=cmd_count_rounds)
+
+    p = sub.add_parser("check-blockers")
+    p.add_argument("issue", type=int)
+    p.set_defaults(func=cmd_check_blockers)
+
+    p = sub.add_parser("next-startable")
+    p.add_argument("--max-parallel", type=int, default=2)
+    p.set_defaults(func=cmd_next_startable)
 
     p = sub.add_parser("post-review")
     p.add_argument("pr", type=int)
