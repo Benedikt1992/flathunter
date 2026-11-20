@@ -1,0 +1,210 @@
+# Agent · Implement
+# Trigger: the maintainer adds the label `agent:ready` to an issue
+#          (or agent-queue.yml dispatches a queued issue).
+# Result:  branch agent/issue-<n> + draft PR, then dispatches the independent review.
+# Docs:    docs/agent-workflow.md
+name: "Agent · Implement"
+
+on:
+  issues:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: Issue number (must carry `agent:ready` added by the maintainer)
+        required: true
+
+concurrency:
+  group: agent-issue-${{ github.event.issue.number || inputs.issue }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read        # GITHUB_TOKEN; pushes use the agent app token
+  issues: write         # labels and comments
+  pull-requests: write  # labels on the PR
+  actions: write        # dispatch the review workflow
+
+env:
+  ISSUE: ${{ github.event.issue.number || inputs.issue }}
+  MAINTAINER: ${{ vars.AGENT_MAINTAINER || github.repository_owner }}
+  DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+  MAX_PARALLEL: ${{ vars.AGENT_MAX_PARALLEL || '2' }}
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  implement:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.label.name == 'agent:ready' &&
+       github.event.sender.login == (vars.AGENT_MAINTAINER || github.repository_owner))
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+
+      - name: Verify the maintainer approved this issue
+        run: python3 .github/scripts/agent_ops.py verify-label "$ISSUE" agent:ready
+
+      - name: Check "Blockiert durch" (all blocking issues must be closed)
+        id: deps
+        run: python3 .github/scripts/agent_ops.py check-blockers "$ISSUE"
+
+      - name: Blocked → wait (agent-queue.yml starts it once the blockers are closed)
+        if: steps.deps.outputs.ok != 'true'
+        env:
+          OPEN: ${{ steps.deps.outputs.open }}
+        run: |
+          labels=$(gh issue view "$ISSUE" --json labels --jq '.labels[].name')
+          if ! grep -qx 'agent:waiting' <<< "$labels"; then
+            gh issue comment "$ISSUE" --body "⏳ Waiting for blocking issues: $OPEN. Work starts automatically once they are closed."
+          fi
+          gh issue edit "$ISSUE" --add-label agent:waiting --remove-label agent:queued --remove-label agent:in-progress || true
+
+      - name: Check work-in-progress limit and existing branch
+        if: steps.deps.outputs.ok == 'true'
+        id: gate
+        run: |
+          branch="agent/issue-${ISSUE}"
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null; then
+            gh issue comment "$ISSUE" --body "Branch \`$branch\` already exists, so an agent is already working on this issue. Remove the branch or the open PR to start over."
+            echo "go=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          # Active agent work = other open issues labelled agent:in-progress (implementing or PR open).
+          active=$(gh issue list --state open --label agent:in-progress --limit 100 --json number \
+                   --jq "[.[] | select(.number != ${ISSUE})] | length")
+          if [ "$active" -ge "$MAX_PARALLEL" ]; then
+            gh issue edit "$ISSUE" --add-label agent:queued --remove-label agent:in-progress --remove-label agent:waiting || true
+            gh issue comment "$ISSUE" --body "Queued: $active agent tasks are active (limit $MAX_PARALLEL). Work starts automatically when one finishes."
+            echo "go=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          gh issue edit "$ISSUE" --add-label agent:in-progress --remove-label agent:queued --remove-label agent:waiting || true
+          echo "go=true" >> "$GITHUB_OUTPUT"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+
+      - name: Create agent app token
+        if: steps.gate.outputs.go == 'true'
+        id: app
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.AGENT_APP_ID }}
+          private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
+
+      - name: Resolve agent bot identity
+        if: steps.gate.outputs.go == 'true'
+        id: bot
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          SLUG: ${{ steps.app.outputs.app-slug }}
+        run: |
+          echo "name=${SLUG}[bot]" >> "$GITHUB_OUTPUT"
+          echo "id=$(gh api "/users/${SLUG}%5Bbot%5D" --jq .id)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-python@v5
+        if: steps.gate.outputs.go == 'true'
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies and gate tools
+        if: steps.gate.outputs.go == 'true'
+        run: |
+          pip install --upgrade pip pipenv
+          pipenv requirements > "$RUNNER_TEMP/requirements.txt"
+          pip install --src "$RUNNER_TEMP/pip-src" -r "$RUNNER_TEMP/requirements.txt" -r requirements-dev.txt
+
+      - name: Prepare branch and context
+        if: steps.gate.outputs.go == 'true'
+        id: prep
+        run: |
+          git checkout -b "${{ steps.gate.outputs.branch }}"
+          mkdir -p .agent
+          python3 .github/scripts/agent_ops.py issue-context "$ISSUE" .agent/context.md
+          echo "schema=$(jq -c . .github/agents/schemas/implement.json)" >> "$GITHUB_OUTPUT"
+          echo "base_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Implement
+        if: steps.gate.outputs.go == 'true'
+        id: claude
+        continue-on-error: true  # evaluate (and report) even if the session fails
+        uses: anthropics/claude-code-action@v1
+        env:
+          AGENT_BASE_REF: origin/${{ github.event.repository.default_branch }}
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ steps.app.outputs.token }}
+          bot_name: ${{ steps.bot.outputs.name }}
+          bot_id: ${{ steps.bot.outputs.id }}
+          prompt: |
+            Read `.github/agents/implementer.md` and follow it exactly.
+            The issue to implement (#${{ env.ISSUE }}) is in `.agent/context.md`.
+            Branch `${{ steps.gate.outputs.branch }}` is checked out.
+          claude_args: |
+            --model ${{ vars.AGENT_IMPLEMENT_MODEL || 'claude-sonnet-5-5' }}
+            --max-turns 120
+            --allowedTools "Read,Edit,Write,Glob,Grep,TodoWrite,Bash(python -m pytest:*),Bash(pytest:*),Bash(coverage:*),Bash(ruff:*),Bash(pyrefly check:*),Bash(complexipy:*),Bash(lint-imports:*),Bash(prek run:*),Bash(python .github/scripts/ratchet.py ruff:*),Bash(python .github/scripts/ratchet.py format:*),Bash(python .github/scripts/ratchet.py prune),Bash(python .github/scripts/mutation_report.py:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git add:*),Bash(git commit:*),Bash(ls:*)"
+            --disallowedTools "Bash(git push:*),Bash(gh:*),Bash(curl:*),Bash(wget:*),Bash(pip:*),WebFetch,WebSearch"
+            --json-schema '${{ steps.prep.outputs.schema }}'
+
+      - name: Evaluate result
+        if: steps.gate.outputs.go == 'true'
+        id: result
+        env:
+          OUT: ${{ steps.claude.outputs.structured_output }}
+          BASE_SHA: ${{ steps.prep.outputs.base_sha }}
+        run: |
+          [ -n "$OUT" ] || OUT='{}'
+          printf '%s' "$OUT" > "$RUNNER_TEMP/result.json"
+          commits=$(git rev-list --count "$BASE_SHA"..HEAD)
+          status=$(jq -r '.status // "failed"' "$RUNNER_TEMP/result.json")
+          echo "commits=$commits status=$status"
+          if [ "$status" = "done" ] && [ "$commits" -gt 0 ]; then
+            echo "push=true" >> "$GITHUB_OUTPUT"
+          else
+            {
+              echo "### 🤖 Agent could not complete this issue"
+              echo
+              echo "Status: \`$status\`, commits: $commits."
+              jq -r 'if (.open_questions // []) | length > 0 then "\n**Open questions:**\n" + ((.open_questions) | map("- " + .) | join("\n")) else "" end' "$RUNNER_TEMP/result.json"
+              echo
+              echo "Answer in a comment and re-add \`agent:ready\` to retry. [Run log]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)"
+            } > "$RUNNER_TEMP/blocked.md"
+            gh issue comment "$ISSUE" --body-file "$RUNNER_TEMP/blocked.md"
+            # blocked = agent has questions; anything else = the run itself failed
+            label=agent:stuck; [ "$status" = "blocked" ] && label=agent:blocked
+            gh issue edit "$ISSUE" --add-label "$label" --remove-label agent:in-progress --remove-label agent:ready || true
+            echo "push=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Push branch and open draft PR
+        if: steps.result.outputs.push == 'true'
+        id: pr
+        env:
+          APP_TOKEN: ${{ steps.app.outputs.token }}
+          BRANCH: ${{ steps.gate.outputs.branch }}
+        run: |
+          git push "https://x-access-token:${APP_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/${BRANCH}"
+          jq -r --arg issue "$ISSUE" '
+            "Closes #\($issue)\n\n## Summary\n\n\(.summary)\n\n## Test plan\n\n\(.test_plan)\n\n" +
+            (if (.follow_ups | length) > 0 then "## Follow-ups (not in this PR)\n\n" + (.follow_ups | map("- " + .) | join("\n")) + "\n\n" else "" end) +
+            "---\n_Implemented by an agent. Next: CI gates → independent agent review → maintainer review & merge._"
+          ' "$RUNNER_TEMP/result.json" > "$RUNNER_TEMP/body.md"
+          title=$(jq -r '.pr_title' "$RUNNER_TEMP/result.json")
+          url=$(GH_TOKEN="$APP_TOKEN" gh pr create --draft --base "$DEFAULT_BRANCH" --head "$BRANCH" \
+                 --title "$title" --body-file "$RUNNER_TEMP/body.md")
+          number="${url##*/}"
+          gh pr edit "$number" --add-label agent:in-progress
+          gh issue edit "$ISSUE" --remove-label agent:ready || true
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+
+      - name: Start independent review
+        if: steps.pr.outputs.number != ''
+        run: gh workflow run agent-review.yml --ref "$DEFAULT_BRANCH" -f pr="${{ steps.pr.outputs.number }}"
+
+      - name: Report failure
+        if: failure()
+        run: |
+          gh issue edit "$ISSUE" --add-label agent:stuck --remove-label agent:in-progress || true
+          gh issue comment "$ISSUE" --body "⚠️ Agent workflow failed. [Run log]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)"

@@ -1,0 +1,149 @@
+# Agent · Review (independent quality control)
+# Trigger: dispatched after every agent push (implement / fix workflows).
+# Flow:    wait for all CI gates on the PR head
+#            ├─ red  → dispatch fix (mode=ci)              [max AGENT_MAX_ROUNDS automatic rounds]
+#            └─ green → independent review (read-only, own identity, trusted prompt from default branch)
+#                 ├─ changes requested → dispatch fix (mode=review)
+#                 └─ approved          → PR ready for review, label needs-human, maintainer requested
+# The reviewer never sees the implementer's reasoning, cannot change code and cannot approve:
+# it posts COMMENT or REQUEST_CHANGES as github-actions[bot]; only the maintainer can approve/merge.
+name: "Agent · Review"
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Pull request number of an agent PR (branch agent/issue-<n>)
+        required: true
+
+concurrency:
+  group: agent-pr-${{ inputs.pr }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  actions: write
+  checks: read
+  statuses: read
+
+env:
+  PR: ${{ inputs.pr }}
+  MAINTAINER: ${{ vars.AGENT_MAINTAINER || github.repository_owner }}
+  DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+  MAX_ROUNDS: ${{ vars.AGENT_MAX_ROUNDS || '3' }}
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+
+      - name: Keep trusted copies of prompts, scripts and rules (default branch)
+        run: |
+          T="$RUNNER_TEMP/trusted"; mkdir -p "$T"
+          cp -r .github/scripts .github/agents CLAUDE.md ARCHITECTURE.md .importlinter "$T/"
+          echo "OPS=$T/scripts/agent_ops.py" >> "$GITHUB_ENV"
+
+      - name: Validate PR
+        id: info
+        run: python3 "$OPS" pr-info "$PR"
+
+      - name: Wait for CI gates
+        if: steps.info.outputs.ok == 'true'
+        id: ci
+        run: python3 "$OPS" wait-checks "$PR" --timeout 45
+
+      - name: Count automatic rounds
+        if: steps.info.outputs.ok == 'true'
+        id: rounds
+        run: python3 "$OPS" count-rounds "$PR" --max "$MAX_ROUNDS"
+
+      - name: CI red → hand back to fixer
+        if: steps.info.outputs.ok == 'true' && steps.ci.outputs.result != 'pass' && steps.rounds.outputs.exhausted != 'true'
+        env:
+          RESULT: ${{ steps.ci.outputs.result }}
+          FAILED: ${{ steps.ci.outputs.failed }}
+        run: |
+          gh pr comment "$PR" --body "🔴 CI gates not green (\`$RESULT\`: $FAILED). Handing back to the fixer."
+          gh workflow run agent-fix.yml --ref "$DEFAULT_BRANCH" -f pr="$PR" -f mode=ci
+
+      - name: Check out PR head with trusted rules
+        if: steps.info.outputs.ok == 'true' && steps.ci.outputs.result == 'pass'
+        id: head
+        env:
+          BRANCH: ${{ steps.info.outputs.branch }}
+          BASE: ${{ steps.info.outputs.base }}
+          ISSUE: ${{ steps.info.outputs.issue }}
+        run: |
+          git fetch -q origin "$BRANCH"
+          git checkout -q --detach "origin/$BRANCH"
+          T="$RUNNER_TEMP/trusted"
+          rm -rf .github/agents && cp -r "$T/agents" .github/agents
+          cp "$T/CLAUDE.md" "$T/ARCHITECTURE.md" "$T/.importlinter" .
+          mkdir -p .agent
+          git diff "origin/$BASE...origin/$BRANCH" > .agent/pr.diff
+          python3 "$OPS" review-context "$PR" "$ISSUE" .agent/context.md
+          echo "sha=$(git rev-parse "origin/$BRANCH")" >> "$GITHUB_OUTPUT"
+          echo "schema=$(jq -c . "$T/agents/schemas/review.json")" >> "$GITHUB_OUTPUT"
+
+      - name: Independent review
+        if: steps.head.outcome == 'success'
+        id: claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ github.token }}
+          prompt: |
+            Read `.github/agents/reviewer.md` and follow it exactly.
+            Pull request #${{ env.PR }}: context in `.agent/context.md`, diff in `.agent/pr.diff`.
+            The PR head is checked out. Return only the structured result.
+          claude_args: |
+            --model ${{ vars.AGENT_REVIEW_MODEL || 'claude-opus-5-5' }}
+            --max-turns 60
+            --allowedTools "Read,Glob,Grep,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(ls:*)"
+            --disallowedTools "Edit,Write,NotebookEdit,Bash(git push:*),Bash(git commit:*),Bash(gh:*),Bash(curl:*),WebFetch,WebSearch"
+            --json-schema '${{ steps.head.outputs.schema }}'
+
+      - name: Post review (verdict by fixed rules)
+        if: steps.head.outcome == 'success'
+        id: verdict
+        env:
+          OUT: ${{ steps.claude.outputs.structured_output }}
+        run: |
+          if [ -z "$OUT" ]; then echo "Reviewer produced no result"; exit 1; fi
+          printf '%s' "$OUT" > "$RUNNER_TEMP/review.json"
+          python3 "$OPS" post-review "$PR" "$RUNNER_TEMP/review.json" .agent/pr.diff "${{ steps.head.outputs.sha }}"
+
+      - name: Changes requested → hand back to fixer
+        if: steps.verdict.outputs.verdict == 'request_changes' && steps.rounds.outputs.exhausted != 'true'
+        run: gh workflow run agent-fix.yml --ref "$DEFAULT_BRANCH" -f pr="$PR" -f mode=review
+
+      - name: Approved → ready for the maintainer
+        if: steps.verdict.outputs.verdict == 'approve'
+        run: |
+          gh pr ready "$PR" || true
+          gh pr edit "$PR" --add-label needs-human --remove-label agent:in-progress --remove-label agent:stuck || true
+          gh pr edit "$PR" --add-reviewer "$MAINTAINER" || true
+
+      - name: Round limit reached → maintainer decides
+        if: >-
+          steps.info.outputs.ok == 'true' && steps.rounds.outputs.exhausted == 'true' &&
+          (steps.ci.outputs.result != 'pass' || steps.verdict.outputs.verdict == 'request_changes')
+        run: |
+          gh pr edit "$PR" --add-label agent:stuck --add-label needs-human --remove-label agent:in-progress || true
+          gh pr comment "$PR" --body "⏸️ @$MAINTAINER: ${{ steps.rounds.outputs.rounds }} automatic fix rounds used (limit $MAX_ROUNDS) and the PR is still not green/approved. Usually the issue needs clarification. Options: request changes with guidance (starts a human-guided round), sharpen the issue and restart, or close the PR."
+          gh pr edit "$PR" --add-reviewer "$MAINTAINER" || true
+
+      - name: Report failure
+        if: failure()
+        run: |
+          gh pr edit "$PR" --add-label agent:stuck || true
+          gh pr comment "$PR" --body "⚠️ Review workflow failed. [Run log]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)"

@@ -1,0 +1,22 @@
+# The maintainer owns everything: every PR needs their approval before it can be merged.
+# Branch protection on the default branch must have "Require review from Code Owners" enabled.
+*                     @Benedikt1992
+
+# Quality gates, agent rules and dependencies (listed explicitly for visibility;
+# additionally enforced by .github/scripts/agent_guard.py)
+/.github/             @Benedikt1992
+/CLAUDE.md            @Benedikt1992
+/ARCHITECTURE.md      @Benedikt1992
+/docs/adr/            @Benedikt1992
+/.importlinter        @Benedikt1992
+/.claude/             @Benedikt1992
+/pyproject.toml       @Benedikt1992
+/pytest.ini           @Benedikt1992
+/.pre-commit-config.yaml @Benedikt1992
+/requirements-*.txt  @Benedikt1992
+/quality/             @Benedikt1992
+/complexipy-snapshot.json @Benedikt1992
+/.coveragerc          @Benedikt1992
+/Pipfile              @Benedikt1992
+/Pipfile.lock         @Benedikt1992
+/setup.py             @Benedikt1992

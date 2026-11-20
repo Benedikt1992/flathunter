@@ -1,0 +1,9 @@
+{"type":"object","additionalProperties":false,
+ "required":["status","pr_title","summary","test_plan","open_questions","follow_ups"],
+ "properties":{
+  "status":{"type":"string","enum":["done","blocked"]},
+  "pr_title":{"type":"string"},
+  "summary":{"type":"string","description":"What changed and why, markdown"},
+  "test_plan":{"type":"string","description":"Which tests prove which acceptance criterion, markdown"},
+  "open_questions":{"type":"array","items":{"type":"string"}},
+  "follow_ups":{"type":"array","items":{"type":"string"}}}}

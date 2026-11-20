@@ -1,0 +1,42 @@
+[
+  {
+    "path": "flathunter/abstract_crawler.py",
+    "file_name": "abstract_crawler.py",
+    "functions": [
+      {
+        "name": "Crawler::get_soup_with_proxy",
+        "complexity": 17
+      }
+    ]
+  },
+  {
+    "path": "flathunter/crawler/immowelt.py",
+    "file_name": "immowelt.py",
+    "functions": [
+      {
+        "name": "Immowelt::extract_data",
+        "complexity": 21
+      }
+    ]
+  },
+  {
+    "path": "flathunter/crawler/kleinanzeigen.py",
+    "file_name": "kleinanzeigen.py",
+    "functions": [
+      {
+        "name": "Kleinanzeigen::_parse_card",
+        "complexity": 18
+      }
+    ]
+  },
+  {
+    "path": "flathunter/crawler/subito.py",
+    "file_name": "subito.py",
+    "functions": [
+      {
+        "name": "Subito::extract_data",
+        "complexity": 17
+      }
+    ]
+  }
+]

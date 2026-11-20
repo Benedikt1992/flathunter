@@ -1,0 +1,5 @@
+# Tooling the test suite itself needs, for every Python version in the test matrix.
+# Install: pip install -r requirements-test.txt   (in addition to the Pipfile dependencies)
+hypothesis==6.170.15; python_version >= "3.11"
+hypothesis==6.168.5; python_version < "3.11"   # last release supporting Python 3.10
+diff-cover==11.0.3; python_version >= "3.11"   # only the 3.11 job checks diff coverage

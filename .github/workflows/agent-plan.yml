@@ -1,0 +1,78 @@
+# Agent · Plan
+# Trigger: the maintainer adds the label `agent:plan` to an issue.
+# Result:  an implementation plan as issue comment (read-only agent, no code changes).
+#          Approve it by adding `agent:ready` (the implementer follows the plan),
+#          or comment with corrections and re-add `agent:plan`.
+name: "Agent · Plan"
+
+on:
+  issues:
+    types: [labeled]
+
+concurrency:
+  group: agent-issue-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  ISSUE: ${{ github.event.issue.number }}
+  MAINTAINER: ${{ vars.AGENT_MAINTAINER || github.repository_owner }}
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  plan:
+    if: >-
+      github.event.label.name == 'agent:plan' &&
+      github.event.sender.login == (vars.AGENT_MAINTAINER || github.repository_owner)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Build context
+        id: prep
+        run: |
+          mkdir -p .agent
+          python3 .github/scripts/agent_ops.py issue-context "$ISSUE" .agent/context.md
+          echo "schema=$(jq -c . .github/agents/schemas/plan.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Plan
+        id: claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ github.token }}
+          prompt: |
+            Read `.github/agents/planner.md` and follow it exactly.
+            The issue (#${{ env.ISSUE }}) is in `.agent/context.md`. Return only the structured result.
+          claude_args: |
+            --model ${{ vars.AGENT_PLAN_MODEL || 'claude-opus-5-5' }}
+            --max-turns 40
+            --allowedTools "Read,Glob,Grep,Bash(git log:*),Bash(git show:*),Bash(ls:*)"
+            --disallowedTools "Edit,Write,NotebookEdit,Bash(git push:*),Bash(git commit:*),Bash(gh:*),Bash(curl:*),WebFetch,WebSearch"
+            --json-schema '${{ steps.prep.outputs.schema }}'
+
+      - name: Post plan
+        env:
+          OUT: ${{ steps.claude.outputs.structured_output }}
+        run: |
+          if [ -z "$OUT" ]; then echo "Planner produced no result"; exit 1; fi
+          printf '%s' "$OUT" | jq -r --arg m "$MAINTAINER" '
+            "<!-- agent-plan -->\n## 🤖 Implementation plan\n\n" +
+            "**Size:** \(.size) · **Architecture impact:** \(.architecture_impact)\n\n" +
+            .plan_markdown + "\n\n" +
+            (if (.open_questions | length) > 0 then "### Open questions\n\n" + (.open_questions | map("- " + .) | join("\n")) + "\n\n" else "" end) +
+            "---\n@\($m): add `agent:ready` to implement this plan, or comment with corrections and re-add `agent:plan`."
+          ' > "$RUNNER_TEMP/plan.md"
+          gh issue comment "$ISSUE" --body-file "$RUNNER_TEMP/plan.md"
+          gh issue edit "$ISSUE" --remove-label agent:plan --add-label agent:plan-ready || true
+
+      - name: Report failure
+        if: failure()
+        run: gh issue comment "$ISSUE" --body "⚠️ Planning failed. [Run log]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)"

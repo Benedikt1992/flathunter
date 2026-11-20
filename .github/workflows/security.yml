@@ -1,0 +1,61 @@
+# Security gates. Blocking on pull requests; weekly report on the default branch.
+name: Security
+
+on:
+  push:
+    branches: [main, fork-main]
+  pull_request:
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# SAST (formerly bandit) runs as Ruff's S rules in quality.yml; CodeQL in codeql.yml.
+jobs:
+  dependencies:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pipenv pip-audit
+      - name: Audit this revision
+        run: |
+          pipenv requirements | grep -vE '^-e |git\+' > "$RUNNER_TEMP/head-req.txt"
+          pip-audit -r "$RUNNER_TEMP/head-req.txt" --no-deps --disable-pip --progress-spinner off \
+            -f json -o "$RUNNER_TEMP/head.json" || true
+      - name: Audit base branch
+        if: github.event_name == 'pull_request'
+        run: |
+          git worktree add -q "$RUNNER_TEMP/base" "${{ github.event.pull_request.base.sha }}"
+          (cd "$RUNNER_TEMP/base" && pipenv requirements) | grep -vE '^-e |git\+' > "$RUNNER_TEMP/base-req.txt"
+          pip-audit -r "$RUNNER_TEMP/base-req.txt" --no-deps --disable-pip --progress-spinner off \
+            -f json -o "$RUNNER_TEMP/base.json" || true
+      - name: Fail on newly introduced vulnerabilities
+        if: github.event_name == 'pull_request'
+        run: python .github/scripts/audit_diff.py "$RUNNER_TEMP/base.json" "$RUNNER_TEMP/head.json"
+      - name: Report known vulnerabilities (non-blocking)
+        if: github.event_name != 'pull_request'
+        run: |
+          echo '{"dependencies":[]}' > "$RUNNER_TEMP/empty.json"
+          python .github/scripts/audit_diff.py "$RUNNER_TEMP/empty.json" "$RUNNER_TEMP/head.json" || true
+
+  secrets:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

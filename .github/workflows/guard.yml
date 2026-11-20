@@ -1,0 +1,40 @@
+# Agent guard: rejects PRs that weaken quality gates (protected files, suppressions,
+# removed tests) unless the maintainer added the matching `allow-*` label.
+# Re-runs when labels change so an override takes effect immediately.
+name: Guard
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: read
+
+jobs:
+  guard:
+    name: Agent guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Self-test of the gate scripts
+        run: |
+          pip install pytest
+          python -m pytest -q -p no:cacheprovider .github/scripts
+      - name: No weakened gates, suppressions or removed tests
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR: ${{ github.event.pull_request.number }}
+          MAINTAINER: ${{ vars.AGENT_MAINTAINER || github.repository_owner }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          python .github/scripts/agent_guard.py --base "$BASE_SHA" --head "$HEAD_SHA" --pr "$PR" \
+            --repo "$GITHUB_REPOSITORY" --maintainer "$MAINTAINER" --author "$AUTHOR"

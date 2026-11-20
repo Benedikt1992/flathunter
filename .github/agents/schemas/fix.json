@@ -1,0 +1,9 @@
+{"type":"object","additionalProperties":false,
+ "required":["status","summary","replies","open_questions"],
+ "properties":{
+  "status":{"type":"string","enum":["done","partial","blocked"]},
+  "summary":{"type":"string","description":"What was changed in this round, markdown"},
+  "replies":{"type":"array","items":{"type":"object","additionalProperties":false,
+    "required":["reply_to_id","body"],
+    "properties":{"reply_to_id":{"type":"integer"},"body":{"type":"string"}}}},
+  "open_questions":{"type":"array","items":{"type":"string"}}}}

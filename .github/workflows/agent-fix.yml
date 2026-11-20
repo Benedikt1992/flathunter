@@ -1,0 +1,196 @@
+# Agent · Fix
+# Trigger: dispatched by agent-review.yml (mode=review | mode=ci)
+#          or by agent-feedback.yml when the maintainer requests changes (mode=human).
+# Result:  new commits on the agent branch, replies to the maintainer's threads,
+#          then the independent review runs again.
+name: "Agent · Fix"
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Pull request number of an agent PR
+        required: true
+      mode:
+        description: Feedback source
+        required: true
+        type: choice
+        options: [review, ci, human]
+
+concurrency:
+  group: agent-pr-${{ inputs.pr }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read        # GITHUB_TOKEN; pushes use the agent app token
+  pull-requests: write
+  issues: write
+  actions: write        # read CI logs, dispatch the review
+
+env:
+  PR: ${{ inputs.pr }}
+  MODE: ${{ inputs.mode }}
+  MAINTAINER: ${{ vars.AGENT_MAINTAINER || github.repository_owner }}
+  DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+  MAX_ROUNDS: ${{ vars.AGENT_MAX_ROUNDS || '3' }}
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+
+      - name: Keep trusted copies of prompts and scripts (default branch)
+        run: |
+          T="$RUNNER_TEMP/trusted"; mkdir -p "$T"
+          cp -r .github/scripts .github/agents "$T/"
+          echo "OPS=$T/scripts/agent_ops.py" >> "$GITHUB_ENV"
+
+      - name: Validate PR
+        id: info
+        run: python3 "$OPS" pr-info "$PR"
+
+      - name: Enforce automatic round limit
+        if: steps.info.outputs.ok == 'true'
+        id: rounds
+        run: |
+          counted=$(python3 "$OPS" count-rounds "$PR" --max "$MAX_ROUNDS")
+          echo "$counted"
+          # human-requested rounds are never limited
+          if [ "$MODE" != "human" ] && echo "$counted" | grep -q '^exhausted=true'; then
+            gh pr edit "$PR" --add-label agent:stuck --add-label needs-human --remove-label agent:in-progress || true
+            echo "go=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Mark PR as in progress
+        if: steps.rounds.outputs.go == 'true'
+        run: gh pr edit "$PR" --add-label agent:in-progress --remove-label needs-human --remove-label agent:stuck || true
+
+      - name: Create agent app token
+        if: steps.rounds.outputs.go == 'true'
+        id: app
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.AGENT_APP_ID }}
+          private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
+
+      - name: Resolve agent bot identity
+        if: steps.rounds.outputs.go == 'true'
+        id: bot
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          SLUG: ${{ steps.app.outputs.app-slug }}
+        run: |
+          echo "name=${SLUG}[bot]" >> "$GITHUB_OUTPUT"
+          echo "id=$(gh api "/users/${SLUG}%5Bbot%5D" --jq .id)" >> "$GITHUB_OUTPUT"
+
+      - name: Check out agent branch and build context
+        if: steps.rounds.outputs.go == 'true'
+        id: prep
+        env:
+          BRANCH: ${{ steps.info.outputs.branch }}
+          ISSUE: ${{ steps.info.outputs.issue }}
+          SHA: ${{ steps.info.outputs.head_sha }}
+        run: |
+          git fetch -q origin "$BRANCH"
+          git checkout -q -B "$BRANCH" "origin/$BRANCH"
+          T="$RUNNER_TEMP/trusted"
+          mkdir -p .agent
+          case "$MODE" in
+            review) python3 "$OPS" findings-context "$PR" "$ISSUE" .agent/context.md ;;
+            ci)     python3 "$OPS" ci-context "$PR" "$ISSUE" "$SHA" .agent/context.md ;;
+            human)  python3 "$OPS" human-context "$PR" "$ISSUE" .agent/context.md ;;
+          esac
+          cp "$T/agents/fixer.md" .agent/role.md
+          echo "schema=$(jq -c . "$T/agents/schemas/fix.json")" >> "$GITHUB_OUTPUT"
+          echo "base_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-python@v5
+        if: steps.rounds.outputs.go == 'true'
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies and gate tools
+        if: steps.rounds.outputs.go == 'true'
+        run: |
+          pip install --upgrade pip pipenv
+          pipenv requirements > "$RUNNER_TEMP/requirements.txt"
+          pip install --src "$RUNNER_TEMP/pip-src" -r "$RUNNER_TEMP/requirements.txt" -r requirements-dev.txt
+
+      - name: Fix
+        if: steps.rounds.outputs.go == 'true'
+        id: claude
+        continue-on-error: true  # still push partial work and report
+        uses: anthropics/claude-code-action@v1
+        env:
+          AGENT_BASE_REF: origin/${{ github.event.repository.default_branch }}
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ steps.app.outputs.token }}
+          bot_name: ${{ steps.bot.outputs.name }}
+          bot_id: ${{ steps.bot.outputs.id }}
+          prompt: |
+            Read `.agent/role.md` and follow it exactly.
+            Pull request #${{ env.PR }}, feedback source: `${{ env.MODE }}`.
+            The feedback and the original issue are in `.agent/context.md`.
+            The PR branch is checked out.
+          claude_args: |
+            --model ${{ vars.AGENT_FIX_MODEL || 'claude-sonnet-5-5' }}
+            --max-turns 80
+            --allowedTools "Read,Edit,Write,Glob,Grep,TodoWrite,Bash(python -m pytest:*),Bash(pytest:*),Bash(coverage:*),Bash(ruff:*),Bash(pyrefly check:*),Bash(complexipy:*),Bash(lint-imports:*),Bash(prek run:*),Bash(python .github/scripts/ratchet.py ruff:*),Bash(python .github/scripts/ratchet.py format:*),Bash(python .github/scripts/ratchet.py prune),Bash(python .github/scripts/mutation_report.py:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git add:*),Bash(git commit:*),Bash(ls:*)"
+            --disallowedTools "Bash(git push:*),Bash(git rebase:*),Bash(git reset:*),Bash(git commit --amend:*),Bash(gh:*),Bash(curl:*),Bash(wget:*),Bash(pip:*),WebFetch,WebSearch"
+            --json-schema '${{ steps.prep.outputs.schema }}'
+
+      - name: Push, reply and record the round
+        if: steps.rounds.outputs.go == 'true'
+        id: push
+        env:
+          OUT: ${{ steps.claude.outputs.structured_output }}
+          APP_TOKEN: ${{ steps.app.outputs.token }}
+          BRANCH: ${{ steps.info.outputs.branch }}
+          BASE_SHA: ${{ steps.prep.outputs.base_sha }}
+        run: |
+          [ -n "$OUT" ] || OUT='{}'
+          printf '%s' "$OUT" > "$RUNNER_TEMP/result.json"
+          commits=$(git rev-list --count "$BASE_SHA"..HEAD)
+          status=$(jq -r '.status // "failed"' "$RUNNER_TEMP/result.json")
+          if [ "$commits" -gt 0 ]; then
+            git push "https://x-access-token:${APP_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/${BRANCH}"
+          fi
+          if [ "$MODE" = "human" ]; then
+            GH_TOKEN="$APP_TOKEN" python3 "$OPS" post-replies "$PR" "$RUNNER_TEMP/result.json"
+          fi
+          {
+            echo "<!-- agent-fix-round mode=$MODE -->"
+            echo "### 🔧 Fix round (\`$MODE\`) — status \`$status\`, $commits new commit(s)"
+            echo
+            jq -r '.summary // "_no summary_"' "$RUNNER_TEMP/result.json"
+            jq -r 'if (.open_questions // []) | length > 0 then "\n**Open questions:**\n" + ((.open_questions) | map("- " + .) | join("\n")) else "" end' "$RUNNER_TEMP/result.json"
+          } > "$RUNNER_TEMP/round.md"
+          GH_TOKEN="$APP_TOKEN" gh pr comment "$PR" --body-file "$RUNNER_TEMP/round.md"
+          echo "commits=$commits" >> "$GITHUB_OUTPUT"
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+
+      - name: Re-review
+        if: steps.push.outputs.commits != '' && steps.push.outputs.commits != '0'
+        run: gh workflow run agent-review.yml --ref "$DEFAULT_BRANCH" -f pr="$PR"
+
+      - name: Nothing changed → back to the maintainer
+        if: steps.push.outputs.commits == '0'
+        run: |
+          gh pr edit "$PR" --add-label needs-human --remove-label agent:in-progress || true
+          gh pr edit "$PR" --add-reviewer "$MAINTAINER" || true
+
+      - name: Report failure
+        if: failure()
+        run: |
+          gh pr edit "$PR" --add-label agent:stuck --remove-label agent:in-progress || true
+          gh pr comment "$PR" --body "⚠️ Fix workflow failed. [Run log]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)"

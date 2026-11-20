@@ -1,0 +1,1908 @@
+{
+  "errors": [
+    {
+      "column": 24,
+      "path": "config_wizard.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__init__` is missing an annotation for parameter `urls`",
+      "severity": "error"
+    },
+    {
+      "column": 30,
+      "path": "config_wizard.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__init__` is missing an annotation for parameter `config`",
+      "severity": "error"
+    },
+    {
+      "column": 39,
+      "path": "config_wizard.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`configure_notifier` is missing an annotation for parameter `config`",
+      "severity": "error"
+    },
+    {
+      "column": 17,
+      "path": "config_wizard.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`load_config` is missing an annotation for parameter `existing`",
+      "severity": "error"
+    },
+    {
+      "column": 25,
+      "path": "config_wizard.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_KT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 25,
+      "path": "config_wizard.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_VT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 22,
+      "path": "flathunt.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`launch_flat_hunt` is missing an annotation for parameter `config`",
+      "severity": "error"
+    },
+    {
+      "column": 18,
+      "path": "flathunter/abstract_crawler.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `AnyStr` for generic class `Pattern[AnyStr]`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/abstract_crawler.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__init__` is missing an annotation for parameter `config`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/abstract_crawler.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`get_page` is missing an annotation for parameter `search_url`",
+      "severity": "error"
+    },
+    {
+      "column": 36,
+      "path": "flathunter/abstract_crawler.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`get_page` is missing an annotation for parameter `driver`",
+      "severity": "error"
+    },
+    {
+      "column": 49,
+      "path": "flathunter/abstract_crawler.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`get_page` is missing an annotation for parameter `page_no`",
+      "severity": "error"
+    },
+    {
+      "column": 35,
+      "path": "flathunter/abstract_crawler.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`get_soup_with_proxy` is missing an annotation for parameter `url`",
+      "severity": "error"
+    },
+    {
+      "column": 28,
+      "path": "flathunter/abstract_crawler.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`extract_data` is missing an annotation for parameter `raw_data`",
+      "severity": "error"
+    },
+    {
+      "column": 27,
+      "path": "flathunter/abstract_crawler.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`get_results` is missing an annotation for parameter `search_url`",
+      "severity": "error"
+    },
+    {
+      "column": 39,
+      "path": "flathunter/abstract_crawler.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`get_results` is missing an annotation for parameter `max_pages`",
+      "severity": "error"
+    },
+    {
+      "column": 21,
+      "path": "flathunter/abstract_crawler.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`crawl` is missing an annotation for parameter `url`",
+      "severity": "error"
+    },
+    {
+      "column": 26,
+      "path": "flathunter/abstract_crawler.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`crawl` is missing an annotation for parameter `max_pages`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/abstract_crawler.py",
+      "name": "implicit-any-empty-container",
+      "concise_description": "Cannot infer type of empty container; it will be treated as containing `Any`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/abstract_crawler.py",
+      "name": "implicit-any-empty-container",
+      "concise_description": "Cannot infer type of empty container; it will be treated as containing `Any`",
+      "severity": "error"
+    },
+    {
+      "column": 16,
+      "path": "flathunter/abstract_crawler.py",
+      "name": "implicit-any-empty-container",
+      "concise_description": "Cannot infer type of empty container; it will be treated as containing `Any`",
+      "severity": "error"
+    },
+    {
+      "column": 34,
+      "path": "flathunter/abstract_crawler.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`get_expose_details` is missing an annotation for parameter `expose`",
+      "severity": "error"
+    },
+    {
+      "column": 31,
+      "path": "flathunter/abstract_crawler.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`resolve_geetest` is missing an annotation for parameter `driver`",
+      "severity": "error"
+    },
+    {
+      "column": 30,
+      "path": "flathunter/abstract_crawler.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`resolve_awsawf` is missing an annotation for parameter `driver`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/abstract_crawler.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`log_filter` is missing an annotation for parameter `log_`",
+      "severity": "error"
+    },
+    {
+      "column": 33,
+      "path": "flathunter/abstract_crawler.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`resolve_recaptcha` is missing an annotation for parameter `driver`",
+      "severity": "error"
+    },
+    {
+      "column": 29,
+      "path": "flathunter/abstract_crawler.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`_clickcaptcha` is missing an annotation for parameter `driver`",
+      "severity": "error"
+    },
+    {
+      "column": 44,
+      "path": "flathunter/abstract_crawler.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`_wait_for_captcha_resolution` is missing an annotation for parameter `driver`",
+      "severity": "error"
+    },
+    {
+      "column": 68,
+      "path": "flathunter/abstract_crawler.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`_wait_for_captcha_resolution` is missing an annotation for parameter `afterlogin_string`",
+      "severity": "error"
+    },
+    {
+      "column": 38,
+      "path": "flathunter/abstract_processor.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_KT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 38,
+      "path": "flathunter/abstract_processor.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_VT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 47,
+      "path": "flathunter/abstract_processor.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_KT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 47,
+      "path": "flathunter/abstract_processor.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_VT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 31,
+      "path": "flathunter/abstract_processor.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`process_exposes` is missing an annotation for parameter `exposes`",
+      "severity": "error"
+    },
+    {
+      "column": 55,
+      "path": "flathunter/captcha/capmonster_solver.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `dict[str, dict[str, bool | str] | Unknown]` is not assignable to parameter `params` with type `dict[str, str]` in function `CapmonsterSolver.__submit_capmonster_request`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/captcha/captcha_solver.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__init__` is missing an annotation for parameter `api_key`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/captcha/captcha_solver.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__init__` is missing an annotation for parameter `message`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/chrome_wrapper.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`get_command_output` is missing an annotation for parameter `args`",
+      "severity": "error"
+    },
+    {
+      "column": 23,
+      "path": "flathunter/chrome_wrapper.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`get_chrome_driver` is missing an annotation for parameter `driver_arguments`",
+      "severity": "error"
+    },
+    {
+      "column": 11,
+      "path": "flathunter/config.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`elide` is missing an annotation for parameter `string`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/config.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__init__` is missing an annotation for parameter `config`",
+      "severity": "error"
+    },
+    {
+      "column": 22,
+      "path": "flathunter/config.py",
+      "name": "implicit-any-empty-container",
+      "concise_description": "Cannot infer type of empty container; it will be treated as containing `Any`",
+      "severity": "error"
+    },
+    {
+      "column": 27,
+      "path": "flathunter/config.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__getitem__` is missing an annotation for parameter `value`",
+      "severity": "error"
+    },
+    {
+      "column": 19,
+      "path": "flathunter/config.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`get` is missing an annotation for parameter `key`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/config.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`get` is missing an annotation for parameter `value`",
+      "severity": "error"
+    },
+    {
+      "column": 31,
+      "path": "flathunter/config.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`_read_yaml_path` is missing an annotation for parameter `path`",
+      "severity": "error"
+    },
+    {
+      "column": 37,
+      "path": "flathunter/config.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`_read_yaml_path` is missing an annotation for parameter `default_value`",
+      "severity": "error"
+    },
+    {
+      "column": 29,
+      "path": "flathunter/config.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`set_searchers` is missing an annotation for parameter `searchers`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/config.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__init__` is missing an annotation for parameter `filename`",
+      "severity": "error"
+    },
+    {
+      "column": 22,
+      "path": "flathunter/config.py",
+      "name": "implicit-any-empty-container",
+      "concise_description": "Cannot infer type of empty container; it will be treated as containing `Any`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/crawler/idealista.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__init__` is missing an annotation for parameter `config`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/crawler/idealista.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`get_page` is missing an annotation for parameter `search_url`",
+      "severity": "error"
+    },
+    {
+      "column": 36,
+      "path": "flathunter/crawler/idealista.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`get_page` is missing an annotation for parameter `driver`",
+      "severity": "error"
+    },
+    {
+      "column": 49,
+      "path": "flathunter/crawler/idealista.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`get_page` is missing an annotation for parameter `page_no`",
+      "severity": "error"
+    },
+    {
+      "column": 28,
+      "path": "flathunter/crawler/idealista.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`extract_data` is missing an annotation for parameter `raw_data`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/crawler/immobiliare.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__init__` is missing an annotation for parameter `config`",
+      "severity": "error"
+    },
+    {
+      "column": 28,
+      "path": "flathunter/crawler/immobiliare.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`extract_data` is missing an annotation for parameter `raw_data`",
+      "severity": "error"
+    },
+    {
+      "column": 40,
+      "path": "flathunter/crawler/immobilienscout.py",
+      "name": "implicit-any-empty-container",
+      "concise_description": "Cannot infer type of empty container; it will be treated as containing `Any`",
+      "severity": "error"
+    },
+    {
+      "column": 25,
+      "path": "flathunter/crawler/immobilienscout.py",
+      "name": "implicit-any-empty-container",
+      "concise_description": "Cannot infer type of empty container; it will be treated as containing `Any`",
+      "severity": "error"
+    },
+    {
+      "column": 38,
+      "path": "flathunter/crawler/immobilienscout.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_KT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 38,
+      "path": "flathunter/crawler/immobilienscout.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_VT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 47,
+      "path": "flathunter/crawler/immobilienscout.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_T` for generic class `list[_T]`",
+      "severity": "error"
+    },
+    {
+      "column": 20,
+      "path": "flathunter/crawler/immobilienscout.py",
+      "name": "implicit-any-lambda",
+      "concise_description": "Type of lambda parameter `entry` is unknown",
+      "severity": "error"
+    },
+    {
+      "column": 9,
+      "path": "flathunter/crawler/immobilienscout.py",
+      "name": "bad-override",
+      "concise_description": "Class member `Immobilienscout.get_results` overrides parent class `Crawler` in an inconsistent manner",
+      "severity": "error"
+    },
+    {
+      "column": 77,
+      "path": "flathunter/crawler/immobilienscout.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_T` for generic class `list[_T]`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/crawler/immowelt.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__init__` is missing an annotation for parameter `config`",
+      "severity": "error"
+    },
+    {
+      "column": 34,
+      "path": "flathunter/crawler/immowelt.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`get_expose_details` is missing an annotation for parameter `expose`",
+      "severity": "error"
+    },
+    {
+      "column": 20,
+      "path": "flathunter/crawler/immowelt.py",
+      "name": "implicit-any-empty-container",
+      "concise_description": "Cannot infer type of empty container; it will be treated as containing `Any`",
+      "severity": "error"
+    },
+    {
+      "column": 20,
+      "path": "flathunter/crawler/immowelt.py",
+      "name": "implicit-any-empty-container",
+      "concise_description": "Cannot infer type of empty container; it will be treated as containing `Any`",
+      "severity": "error"
+    },
+    {
+      "column": 32,
+      "path": "flathunter/crawler/immowelt.py",
+      "name": "implicit-any-empty-container",
+      "concise_description": "Cannot infer type of empty container; it will be treated as containing `Any`",
+      "severity": "error"
+    },
+    {
+      "column": 34,
+      "path": "flathunter/crawler/kleinanzeigen.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`get_expose_details` is missing an annotation for parameter `expose`",
+      "severity": "error"
+    },
+    {
+      "column": 28,
+      "path": "flathunter/crawler/kleinanzeigen.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`extract_data` is missing an annotation for parameter `raw_data`",
+      "severity": "error"
+    },
+    {
+      "column": 19,
+      "path": "flathunter/crawler/kleinanzeigen.py",
+      "name": "implicit-any-empty-container",
+      "concise_description": "Cannot infer type of empty container; it will be treated as containing `Any`",
+      "severity": "error"
+    },
+    {
+      "column": 36,
+      "path": "flathunter/crawler/kleinanzeigen.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`_parse_legacy_aditem` is missing an annotation for parameter `expose`",
+      "severity": "error"
+    },
+    {
+      "column": 28,
+      "path": "flathunter/crawler/kleinanzeigen.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`load_address` is missing an annotation for parameter `url`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/crawler/subito.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__init__` is missing an annotation for parameter `config`",
+      "severity": "error"
+    },
+    {
+      "column": 28,
+      "path": "flathunter/crawler/subito.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`extract_data` is missing an annotation for parameter `raw_data`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/crawler/vrmimmo.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__init__` is missing an annotation for parameter `config`",
+      "severity": "error"
+    },
+    {
+      "column": 73,
+      "path": "flathunter/crawler/wggesucht.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_KT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 73,
+      "path": "flathunter/crawler/wggesucht.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_VT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 72,
+      "path": "flathunter/crawler/wggesucht.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_KT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 72,
+      "path": "flathunter/crawler/wggesucht.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_VT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/crawler/wggesucht.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__init__` is missing an annotation for parameter `config`",
+      "severity": "error"
+    },
+    {
+      "column": 61,
+      "path": "flathunter/crawler/wggesucht.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_KT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 61,
+      "path": "flathunter/crawler/wggesucht.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_VT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 28,
+      "path": "flathunter/crawler/wggesucht.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`load_address` is missing an annotation for parameter `url`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/default_processors.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__init__` is missing an annotation for parameter `config`",
+      "severity": "error"
+    },
+    {
+      "column": 32,
+      "path": "flathunter/default_processors.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__init__` is missing an annotation for parameter `filter_set`",
+      "severity": "error"
+    },
+    {
+      "column": 31,
+      "path": "flathunter/default_processors.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`process_exposes` is missing an annotation for parameter `exposes`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/default_processors.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__init__` is missing an annotation for parameter `config`",
+      "severity": "error"
+    },
+    {
+      "column": 30,
+      "path": "flathunter/default_processors.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`process_expose` is missing an annotation for parameter `expose`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/default_processors.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__init__` is missing an annotation for parameter `config`",
+      "severity": "error"
+    },
+    {
+      "column": 30,
+      "path": "flathunter/default_processors.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`process_expose` is missing an annotation for parameter `expose`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/default_processors.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__init__` is missing an annotation for parameter `config`",
+      "severity": "error"
+    },
+    {
+      "column": 32,
+      "path": "flathunter/default_processors.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__init__` is missing an annotation for parameter `func`",
+      "severity": "error"
+    },
+    {
+      "column": 30,
+      "path": "flathunter/default_processors.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`process_expose` is missing an annotation for parameter `expose`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/exceptions.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__init__` is missing an annotation for parameter `message`",
+      "severity": "error"
+    },
+    {
+      "column": 19,
+      "path": "flathunter/filter.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`get_price` is missing an annotation for parameter `expose`",
+      "severity": "error"
+    },
+    {
+      "column": 18,
+      "path": "flathunter/filter.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`get_size` is missing an annotation for parameter `expose`",
+      "severity": "error"
+    },
+    {
+      "column": 19,
+      "path": "flathunter/filter.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`get_rooms` is missing an annotation for parameter `expose`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/filter.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__init__` is missing an annotation for parameter `id_watch`",
+      "severity": "error"
+    },
+    {
+      "column": 9,
+      "path": "flathunter/filter.py",
+      "name": "bad-override-param-name",
+      "concise_description": "Class member `AlreadySeenFilter.is_interesting` overrides parent class `AbstractFilter` in an inconsistent manner",
+      "severity": "error"
+    },
+    {
+      "column": 30,
+      "path": "flathunter/filter.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`is_interesting` is missing an annotation for parameter `expose`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/filter.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__init__` is missing an annotation for parameter `max_price`",
+      "severity": "error"
+    },
+    {
+      "column": 9,
+      "path": "flathunter/filter.py",
+      "name": "bad-override-param-name",
+      "concise_description": "Class member `MaxPriceFilter.is_interesting` overrides parent class `AbstractFilter` in an inconsistent manner",
+      "severity": "error"
+    },
+    {
+      "column": 30,
+      "path": "flathunter/filter.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`is_interesting` is missing an annotation for parameter `expose`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/filter.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__init__` is missing an annotation for parameter `min_price`",
+      "severity": "error"
+    },
+    {
+      "column": 9,
+      "path": "flathunter/filter.py",
+      "name": "bad-override-param-name",
+      "concise_description": "Class member `MinPriceFilter.is_interesting` overrides parent class `AbstractFilter` in an inconsistent manner",
+      "severity": "error"
+    },
+    {
+      "column": 30,
+      "path": "flathunter/filter.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`is_interesting` is missing an annotation for parameter `expose`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/filter.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__init__` is missing an annotation for parameter `max_size`",
+      "severity": "error"
+    },
+    {
+      "column": 9,
+      "path": "flathunter/filter.py",
+      "name": "bad-override-param-name",
+      "concise_description": "Class member `MaxSizeFilter.is_interesting` overrides parent class `AbstractFilter` in an inconsistent manner",
+      "severity": "error"
+    },
+    {
+      "column": 30,
+      "path": "flathunter/filter.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`is_interesting` is missing an annotation for parameter `expose`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/filter.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__init__` is missing an annotation for parameter `min_size`",
+      "severity": "error"
+    },
+    {
+      "column": 9,
+      "path": "flathunter/filter.py",
+      "name": "bad-override-param-name",
+      "concise_description": "Class member `MinSizeFilter.is_interesting` overrides parent class `AbstractFilter` in an inconsistent manner",
+      "severity": "error"
+    },
+    {
+      "column": 30,
+      "path": "flathunter/filter.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`is_interesting` is missing an annotation for parameter `expose`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/filter.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__init__` is missing an annotation for parameter `max_rooms`",
+      "severity": "error"
+    },
+    {
+      "column": 9,
+      "path": "flathunter/filter.py",
+      "name": "bad-override-param-name",
+      "concise_description": "Class member `MaxRoomsFilter.is_interesting` overrides parent class `AbstractFilter` in an inconsistent manner",
+      "severity": "error"
+    },
+    {
+      "column": 30,
+      "path": "flathunter/filter.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`is_interesting` is missing an annotation for parameter `expose`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/filter.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__init__` is missing an annotation for parameter `min_rooms`",
+      "severity": "error"
+    },
+    {
+      "column": 9,
+      "path": "flathunter/filter.py",
+      "name": "bad-override-param-name",
+      "concise_description": "Class member `MinRoomsFilter.is_interesting` overrides parent class `AbstractFilter` in an inconsistent manner",
+      "severity": "error"
+    },
+    {
+      "column": 30,
+      "path": "flathunter/filter.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`is_interesting` is missing an annotation for parameter `expose`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/filter.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__init__` is missing an annotation for parameter `filtered_titles`",
+      "severity": "error"
+    },
+    {
+      "column": 9,
+      "path": "flathunter/filter.py",
+      "name": "bad-override-param-name",
+      "concise_description": "Class member `TitleFilter.is_interesting` overrides parent class `AbstractFilter` in an inconsistent manner",
+      "severity": "error"
+    },
+    {
+      "column": 30,
+      "path": "flathunter/filter.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`is_interesting` is missing an annotation for parameter `expose`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/filter.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__init__` is missing an annotation for parameter `max_pps`",
+      "severity": "error"
+    },
+    {
+      "column": 9,
+      "path": "flathunter/filter.py",
+      "name": "bad-override-param-name",
+      "concise_description": "Class member `PPSFilter.is_interesting` overrides parent class `AbstractFilter` in an inconsistent manner",
+      "severity": "error"
+    },
+    {
+      "column": 30,
+      "path": "flathunter/filter.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`is_interesting` is missing an annotation for parameter `expose`",
+      "severity": "error"
+    },
+    {
+      "column": 27,
+      "path": "flathunter/filter.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`read_config` is missing an annotation for parameter `config`",
+      "severity": "error"
+    },
+    {
+      "column": 35,
+      "path": "flathunter/filter.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`filter_already_seen` is missing an annotation for parameter `id_watch`",
+      "severity": "error"
+    },
+    {
+      "column": 37,
+      "path": "flathunter/filter.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`is_interesting_expose` is missing an annotation for parameter `expose`",
+      "severity": "error"
+    },
+    {
+      "column": 22,
+      "path": "flathunter/filter.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`filter` is missing an annotation for parameter `exposes`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/gmaps_duration_processor.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__init__` is missing an annotation for parameter `config`",
+      "severity": "error"
+    },
+    {
+      "column": 30,
+      "path": "flathunter/gmaps_duration_processor.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`process_expose` is missing an annotation for parameter `expose`",
+      "severity": "error"
+    },
+    {
+      "column": 39,
+      "path": "flathunter/gmaps_duration_processor.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`get_formatted_durations` is missing an annotation for parameter `address`",
+      "severity": "error"
+    },
+    {
+      "column": 34,
+      "path": "flathunter/gmaps_duration_processor.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`get_gmaps_distance` is missing an annotation for parameter `address`",
+      "severity": "error"
+    },
+    {
+      "column": 43,
+      "path": "flathunter/gmaps_duration_processor.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`get_gmaps_distance` is missing an annotation for parameter `dest`",
+      "severity": "error"
+    },
+    {
+      "column": 49,
+      "path": "flathunter/gmaps_duration_processor.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`get_gmaps_distance` is missing an annotation for parameter `mode`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/googlecloud_idmaintainer.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__init__` is missing an annotation for parameter `config`",
+      "severity": "error"
+    },
+    {
+      "column": 30,
+      "path": "flathunter/googlecloud_idmaintainer.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`mark_processed` is missing an annotation for parameter `expose_id`",
+      "severity": "error"
+    },
+    {
+      "column": 28,
+      "path": "flathunter/googlecloud_idmaintainer.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`is_processed` is missing an annotation for parameter `expose_id`",
+      "severity": "error"
+    },
+    {
+      "column": 27,
+      "path": "flathunter/googlecloud_idmaintainer.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`save_expose` is missing an annotation for parameter `expose`",
+      "severity": "error"
+    },
+    {
+      "column": 33,
+      "path": "flathunter/googlecloud_idmaintainer.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`get_exposes_since` is missing an annotation for parameter `min_datetime`",
+      "severity": "error"
+    },
+    {
+      "column": 34,
+      "path": "flathunter/googlecloud_idmaintainer.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`get_recent_exposes` is missing an annotation for parameter `count`",
+      "severity": "error"
+    },
+    {
+      "column": 41,
+      "path": "flathunter/googlecloud_idmaintainer.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`get_recent_exposes` is missing an annotation for parameter `filter_set`",
+      "severity": "error"
+    },
+    {
+      "column": 37,
+      "path": "flathunter/googlecloud_idmaintainer.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`get_settings_for_user` is missing an annotation for parameter `user_id`",
+      "severity": "error"
+    },
+    {
+      "column": 38,
+      "path": "flathunter/googlecloud_idmaintainer.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`save_settings_for_user` is missing an annotation for parameter `user_id`",
+      "severity": "error"
+    },
+    {
+      "column": 47,
+      "path": "flathunter/googlecloud_idmaintainer.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`save_settings_for_user` is missing an annotation for parameter `settings`",
+      "severity": "error"
+    },
+    {
+      "column": 30,
+      "path": "flathunter/heartbeat.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`send_heartbeat` is missing an annotation for parameter `counter`",
+      "severity": "error"
+    },
+    {
+      "column": 44,
+      "path": "flathunter/hunter.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__init__` is missing an annotation for parameter `id_watch`",
+      "severity": "error"
+    },
+    {
+      "column": 33,
+      "path": "flathunter/hunter.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`crawl_for_exposes` is missing an annotation for parameter `max_pages`",
+      "severity": "error"
+    },
+    {
+      "column": 23,
+      "path": "flathunter/hunter.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`try_crawl` is missing an annotation for parameter `searcher`",
+      "severity": "error"
+    },
+    {
+      "column": 33,
+      "path": "flathunter/hunter.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`try_crawl` is missing an annotation for parameter `url`",
+      "severity": "error"
+    },
+    {
+      "column": 38,
+      "path": "flathunter/hunter.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`try_crawl` is missing an annotation for parameter `max_pages`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/hunter.py",
+      "name": "implicit-any-empty-container",
+      "concise_description": "Cannot infer type of empty container; it will be treated as containing `Any`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/hunter.py",
+      "name": "implicit-any-empty-container",
+      "concise_description": "Cannot infer type of empty container; it will be treated as containing `Any`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/idmaintainer.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__init__` is missing an annotation for parameter `config`",
+      "severity": "error"
+    },
+    {
+      "column": 32,
+      "path": "flathunter/idmaintainer.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__init__` is missing an annotation for parameter `id_watch`",
+      "severity": "error"
+    },
+    {
+      "column": 30,
+      "path": "flathunter/idmaintainer.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`process_expose` is missing an annotation for parameter `expose`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/idmaintainer.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__init__` is missing an annotation for parameter `db_name`",
+      "severity": "error"
+    },
+    {
+      "column": 28,
+      "path": "flathunter/idmaintainer.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`is_processed` is missing an annotation for parameter `expose_id`",
+      "severity": "error"
+    },
+    {
+      "column": 30,
+      "path": "flathunter/idmaintainer.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`mark_processed` is missing an annotation for parameter `expose_id`",
+      "severity": "error"
+    },
+    {
+      "column": 27,
+      "path": "flathunter/idmaintainer.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`save_expose` is missing an annotation for parameter `expose`",
+      "severity": "error"
+    },
+    {
+      "column": 33,
+      "path": "flathunter/idmaintainer.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`get_exposes_since` is missing an annotation for parameter `min_datetime`",
+      "severity": "error"
+    },
+    {
+      "column": 27,
+      "path": "flathunter/idmaintainer.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`row_to_expose` is missing an annotation for parameter `row`",
+      "severity": "error"
+    },
+    {
+      "column": 34,
+      "path": "flathunter/idmaintainer.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`get_recent_exposes` is missing an annotation for parameter `count`",
+      "severity": "error"
+    },
+    {
+      "column": 41,
+      "path": "flathunter/idmaintainer.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`get_recent_exposes` is missing an annotation for parameter `filter_set`",
+      "severity": "error"
+    },
+    {
+      "column": 15,
+      "path": "flathunter/idmaintainer.py",
+      "name": "implicit-any-empty-container",
+      "concise_description": "Cannot infer type of empty container; it will be treated as containing `Any`",
+      "severity": "error"
+    },
+    {
+      "column": 22,
+      "path": "flathunter/idmaintainer.py",
+      "name": "implicit-any-empty-container",
+      "concise_description": "Cannot infer type of empty container; it will be treated as containing `Any`",
+      "severity": "error"
+    },
+    {
+      "column": 38,
+      "path": "flathunter/idmaintainer.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`save_settings_for_user` is missing an annotation for parameter `user_id`",
+      "severity": "error"
+    },
+    {
+      "column": 47,
+      "path": "flathunter/idmaintainer.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`save_settings_for_user` is missing an annotation for parameter `settings`",
+      "severity": "error"
+    },
+    {
+      "column": 37,
+      "path": "flathunter/idmaintainer.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`get_settings_for_user` is missing an annotation for parameter `user_id`",
+      "severity": "error"
+    },
+    {
+      "column": 21,
+      "path": "flathunter/logging.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_StreamT` for generic class `StreamHandler[_StreamT]`",
+      "severity": "error"
+    },
+    {
+      "column": 20,
+      "path": "flathunter/logging.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`emit` is missing an annotation for parameter `record`",
+      "severity": "error"
+    },
+    {
+      "column": 22,
+      "path": "flathunter/logging.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`setup_wdm_logger` is missing an annotation for parameter `wdm_new_logger_handler`",
+      "severity": "error"
+    },
+    {
+      "column": 23,
+      "path": "flathunter/logging.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`configure_logging` is missing an annotation for parameter `config`",
+      "severity": "error"
+    },
+    {
+      "column": 30,
+      "path": "flathunter/notifiers/sender_apprise.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`process_expose` is missing an annotation for parameter `expose`",
+      "severity": "error"
+    },
+    {
+      "column": 26,
+      "path": "flathunter/notifiers/sender_apprise.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__send_msg` is missing an annotation for parameter `message`",
+      "severity": "error"
+    },
+    {
+      "column": 35,
+      "path": "flathunter/notifiers/sender_apprise.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__send_msg` is missing an annotation for parameter `title`",
+      "severity": "error"
+    },
+    {
+      "column": 42,
+      "path": "flathunter/notifiers/sender_apprise.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__send_msg` is missing an annotation for parameter `attach`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/notifiers/sender_mattermost.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__init__` is missing an annotation for parameter `config`",
+      "severity": "error"
+    },
+    {
+      "column": 30,
+      "path": "flathunter/notifiers/sender_mattermost.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`process_expose` is missing an annotation for parameter `expose`",
+      "severity": "error"
+    },
+    {
+      "column": 22,
+      "path": "flathunter/notifiers/sender_mattermost.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`notify` is missing an annotation for parameter `message`",
+      "severity": "error"
+    },
+    {
+      "column": 38,
+      "path": "flathunter/notifiers/sender_slack.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_KT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 38,
+      "path": "flathunter/notifiers/sender_slack.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_VT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 47,
+      "path": "flathunter/notifiers/sender_slack.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_KT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 47,
+      "path": "flathunter/notifiers/sender_slack.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_VT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 44,
+      "path": "flathunter/notifiers/sender_telegram.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__init__` is missing an annotation for parameter `receivers`",
+      "severity": "error"
+    },
+    {
+      "column": 30,
+      "path": "flathunter/notifiers/sender_telegram.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`process_expose` is missing an annotation for parameter `expose`",
+      "severity": "error"
+    },
+    {
+      "column": 58,
+      "path": "flathunter/notifiers/sender_telegram.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_KT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 58,
+      "path": "flathunter/notifiers/sender_telegram.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_VT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 48,
+      "path": "flathunter/notifiers/sender_telegram.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_KT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 48,
+      "path": "flathunter/notifiers/sender_telegram.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_VT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 50,
+      "path": "flathunter/notifiers/sender_telegram.py",
+      "name": "bad-assignment",
+      "concise_description": "`Unknown | None` is not assignable to dict key `reply_to_message_id` with type `bool | str`",
+      "severity": "error"
+    },
+    {
+      "column": 40,
+      "path": "flathunter/notifiers/sender_telegram.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__handle_error` is missing an annotation for parameter `response`",
+      "severity": "error"
+    },
+    {
+      "column": 50,
+      "path": "flathunter/notifiers/sender_telegram.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__handle_error` is missing an annotation for parameter `chat_id`",
+      "severity": "error"
+    },
+    {
+      "column": 36,
+      "path": "flathunter/notifiers/sender_telegram.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_KT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 36,
+      "path": "flathunter/notifiers/sender_telegram.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_VT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 42,
+      "path": "flathunter/notifiers/sender_telegram.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_KT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 42,
+      "path": "flathunter/notifiers/sender_telegram.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_VT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/processor.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__init__` is missing an annotation for parameter `config`",
+      "severity": "error"
+    },
+    {
+      "column": 29,
+      "path": "flathunter/processor.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`send_messages` is missing an annotation for parameter `receivers`",
+      "severity": "error"
+    },
+    {
+      "column": 19,
+      "path": "flathunter/processor.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`map` is missing an annotation for parameter `func`",
+      "severity": "error"
+    },
+    {
+      "column": 28,
+      "path": "flathunter/processor.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`apply_filter` is missing an annotation for parameter `filter_set`",
+      "severity": "error"
+    },
+    {
+      "column": 32,
+      "path": "flathunter/processor.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`save_all_exposes` is missing an annotation for parameter `id_watch`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/processor.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__init__` is missing an annotation for parameter `processors`",
+      "severity": "error"
+    },
+    {
+      "column": 23,
+      "path": "flathunter/processor.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`process` is missing an annotation for parameter `exposes`",
+      "severity": "error"
+    },
+    {
+      "column": 17,
+      "path": "flathunter/processor.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`builder` is missing an annotation for parameter `config`",
+      "severity": "error"
+    },
+    {
+      "column": 36,
+      "path": "flathunter/schemas/immobilienscout.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_KT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 36,
+      "path": "flathunter/schemas/immobilienscout.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_VT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 59,
+      "path": "flathunter/schemas/immobilienscout.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_KT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 59,
+      "path": "flathunter/schemas/immobilienscout.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_VT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 27,
+      "path": "flathunter/schemas/immobilienscout.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_KT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 27,
+      "path": "flathunter/schemas/immobilienscout.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_VT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 29,
+      "path": "flathunter/time_utils.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`is_current_time_between` is missing an annotation for parameter `time_from`",
+      "severity": "error"
+    },
+    {
+      "column": 40,
+      "path": "flathunter/time_utils.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`is_current_time_between` is missing an annotation for parameter `time_till`",
+      "severity": "error"
+    },
+    {
+      "column": 27,
+      "path": "flathunter/time_utils.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`get_time_span_in_secs` is missing an annotation for parameter `time_a`",
+      "severity": "error"
+    },
+    {
+      "column": 35,
+      "path": "flathunter/time_utils.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`get_time_span_in_secs` is missing an annotation for parameter `time_b`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/time_utils.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`wait_during_period` is missing an annotation for parameter `time_from`",
+      "severity": "error"
+    },
+    {
+      "column": 35,
+      "path": "flathunter/time_utils.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`wait_during_period` is missing an annotation for parameter `time_till`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "flathunter/web/views.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_KT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 12,
+      "path": "flathunter/web/views.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_VT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/web/views.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__init__` is missing an annotation for parameter `parameters`",
+      "severity": "error"
+    },
+    {
+      "column": 15,
+      "path": "flathunter/web/views.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`auth_hash` is missing an annotation for parameter `params`",
+      "severity": "error"
+    },
+    {
+      "column": 23,
+      "path": "flathunter/web/views.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`auth_hash` is missing an annotation for parameter `token`",
+      "severity": "error"
+    },
+    {
+      "column": 15,
+      "path": "flathunter/web/views.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`sign_hash` is missing an annotation for parameter `params`",
+      "severity": "error"
+    },
+    {
+      "column": 23,
+      "path": "flathunter/web/views.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`sign_hash` is missing an annotation for parameter `token`",
+      "severity": "error"
+    },
+    {
+      "column": 21,
+      "path": "flathunter/web/views.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`user_for_params` is missing an annotation for parameter `params`",
+      "severity": "error"
+    },
+    {
+      "column": 29,
+      "path": "flathunter/web/views.py",
+      "name": "unsupported-operation",
+      "concise_description": "Cannot set item in `dict[str, int]`",
+      "severity": "error"
+    },
+    {
+      "column": 26,
+      "path": "flathunter/web_hunter.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`hunt_flats` is missing an annotation for parameter `max_pages`",
+      "severity": "error"
+    },
+    {
+      "column": 34,
+      "path": "flathunter/web_hunter.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`get_recent_exposes` is missing an annotation for parameter `count`",
+      "severity": "error"
+    },
+    {
+      "column": 43,
+      "path": "flathunter/web_hunter.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`get_recent_exposes` is missing an annotation for parameter `filter_set`",
+      "severity": "error"
+    },
+    {
+      "column": 33,
+      "path": "flathunter/web_hunter.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`get_exposes_since` is missing an annotation for parameter `min_datetime`",
+      "severity": "error"
+    },
+    {
+      "column": 36,
+      "path": "flathunter/web_hunter.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`set_filters_for_user` is missing an annotation for parameter `user_id`",
+      "severity": "error"
+    },
+    {
+      "column": 45,
+      "path": "flathunter/web_hunter.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`set_filters_for_user` is missing an annotation for parameter `filters`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/web_hunter.py",
+      "name": "implicit-any-empty-container",
+      "concise_description": "Cannot infer type of empty container; it will be treated as containing `Any`",
+      "severity": "error"
+    },
+    {
+      "column": 36,
+      "path": "flathunter/web_hunter.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`get_filters_for_user` is missing an annotation for parameter `user_id`",
+      "severity": "error"
+    },
+    {
+      "column": 39,
+      "path": "flathunter/web_hunter.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`set_notification_status` is missing an annotation for parameter `user_id`",
+      "severity": "error"
+    },
+    {
+      "column": 48,
+      "path": "flathunter/web_hunter.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`set_notification_status` is missing an annotation for parameter `receives_notifications`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/web_hunter.py",
+      "name": "implicit-any-empty-container",
+      "concise_description": "Cannot infer type of empty container; it will be treated as containing `Any`",
+      "severity": "error"
+    },
+    {
+      "column": 42,
+      "path": "flathunter/web_hunter.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`toggle_notification_status` is missing an annotation for parameter `user_id`",
+      "severity": "error"
+    },
+    {
+      "column": 44,
+      "path": "flathunter/web_hunter.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`notifications_muted_for_user` is missing an annotation for parameter `user_id`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/webdriver_crawler.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`__init__` is missing an annotation for parameter `config`",
+      "severity": "error"
+    },
+    {
+      "column": 23,
+      "path": "flathunter/webdriver_crawler.py",
+      "name": "implicit-any-attribute",
+      "concise_description": "This expression is implicitly inferred to be `Any | None`. Please provide an explicit type annotation.",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "flathunter/webdriver_crawler.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`get_page` is missing an annotation for parameter `search_url`",
+      "severity": "error"
+    },
+    {
+      "column": 36,
+      "path": "flathunter/webdriver_crawler.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`get_page` is missing an annotation for parameter `driver`",
+      "severity": "error"
+    },
+    {
+      "column": 49,
+      "path": "flathunter/webdriver_crawler.py",
+      "name": "implicit-any-parameter",
+      "concise_description": "`get_page` is missing an annotation for parameter `page_no`",
+      "severity": "error"
+    },
+    {
+      "column": 32,
+      "path": "test/crawler/test_crawl_wggesucht.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_KT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 32,
+      "path": "test/crawler/test_crawl_wggesucht.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_VT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 9,
+      "path": "test/dummy_crawler.py",
+      "name": "bad-override",
+      "concise_description": "Class member `DummyCrawler.get_results` overrides parent class `Crawler` in an inconsistent manner",
+      "severity": "error"
+    },
+    {
+      "column": 10,
+      "path": "test/test_chrome_wrapper.py",
+      "name": "implicit-any-empty-container",
+      "concise_description": "Cannot infer type of empty container; it will be treated as containing `Any`",
+      "severity": "error"
+    },
+    {
+      "column": 2,
+      "path": "test/test_chrome_wrapper.py",
+      "name": "implicit-any-empty-container",
+      "concise_description": "Cannot infer type of empty container; it will be treated as containing `Any`",
+      "severity": "error"
+    },
+    {
+      "column": 25,
+      "path": "test/test_googlecloud_idmaintainer.py",
+      "name": "bad-assignment",
+      "concise_description": "`MockFirestore` is not assignable to attribute `database` with type `Client`",
+      "severity": "error"
+    },
+    {
+      "column": 36,
+      "path": "test/test_googlecloud_idmaintainer.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_KT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 36,
+      "path": "test/test_googlecloud_idmaintainer.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_VT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 35,
+      "path": "test/test_hunter.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_KT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 35,
+      "path": "test/test_hunter.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_VT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 36,
+      "path": "test/test_hunter.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_KT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 36,
+      "path": "test/test_hunter.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_VT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 82,
+      "path": "test/test_hunter.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_KT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 82,
+      "path": "test/test_hunter.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_VT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 39,
+      "path": "test/test_hunter.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_KT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 39,
+      "path": "test/test_hunter.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_VT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 85,
+      "path": "test/test_hunter.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_KT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 85,
+      "path": "test/test_hunter.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_VT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 36,
+      "path": "test/test_id_maintainer.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_KT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 36,
+      "path": "test/test_id_maintainer.py",
+      "name": "implicit-any-type-argument",
+      "concise_description": "Cannot determine the type parameter `_VT` for generic class `dict[_KT, _VT]`",
+      "severity": "error"
+    },
+    {
+      "column": 29,
+      "path": "test/test_processor.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `int` has no attribute `startswith`",
+      "severity": "error"
+    },
+    {
+      "column": 66,
+      "path": "test/test_time_utils.py",
+      "name": "implicit-any-lambda",
+      "concise_description": "Type of lambda parameter `args` is unknown",
+      "severity": "error"
+    },
+    {
+      "column": 74,
+      "path": "test/test_time_utils.py",
+      "name": "implicit-any-lambda",
+      "concise_description": "Type of lambda parameter `kw` is unknown",
+      "severity": "error"
+    },
+    {
+      "column": 66,
+      "path": "test/test_time_utils.py",
+      "name": "implicit-any-lambda",
+      "concise_description": "Type of lambda parameter `args` is unknown",
+      "severity": "error"
+    },
+    {
+      "column": 74,
+      "path": "test/test_time_utils.py",
+      "name": "implicit-any-lambda",
+      "concise_description": "Type of lambda parameter `kw` is unknown",
+      "severity": "error"
+    },
+    {
+      "column": 22,
+      "path": "test/utils/config.py",
+      "name": "implicit-any-empty-container",
+      "concise_description": "Cannot infer type of empty container; it will be treated as containing `Any`",
+      "severity": "error"
+    }
+  ]
+}

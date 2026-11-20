@@ -1,0 +1,34 @@
+# Agent · Setup — run once manually (Actions → Agent · Setup → Run workflow).
+# Creates/updates the labels used by the agent workflows.
+name: "Agent · Setup"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  labels:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+    steps:
+      - run: |
+          while IFS='|' read -r name color description; do
+            gh label create "$name" --repo "$REPO" --color "$color" --description "$description" --force
+          done <<'EOF'
+          agent:plan|c5def5|Maintainer: let an agent write an implementation plan
+          agent:plan-ready|c5def5|Agent plan posted, waiting for the maintainer
+          agent:ready|0e8a16|Maintainer: let an agent implement this issue
+          agent:queued|fbca04|Waiting for a free agent slot
+          agent:waiting|fbca04|Waiting for the issues in "Blockiert durch" to be closed
+          agent:in-progress|1d76db|An agent is working on this
+          agent:blocked|d93f0b|Agent needs answers from the maintainer
+          agent:stuck|b60205|Agent workflow failed or ran out of rounds
+          needs-human|5319e7|Ready for the maintainer's review
+          allow-protected-change|e99695|Maintainer: allow changes to protected files in this PR
+          allow-suppression|e99695|Maintainer: allow lint/type/test suppressions in this PR
+          allow-test-removal|e99695|Maintainer: allow removing tests in this PR
+          EOF
