@@ -366,7 +366,13 @@ Because the image uses Firestore to read details of user notification preference
 
 ## Testing
 
-The test suite can be run with `pytest`:
+The test suite needs the development dependencies (pytest, requests-mock, ...), which `pipenv install` leaves out. Install them with:
+
+```sh
+$ pipenv install --dev
+```
+
+Then run the test suite with `pytest`:
 
 ```sh
 $ pytest

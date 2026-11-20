@@ -27,14 +27,14 @@ jobs:
       - run: pip install pipenv pip-audit
       - name: Audit this revision
         run: |
-          pipenv requirements | grep -vE '^-e |git\+' > "$RUNNER_TEMP/head-req.txt"
+          pipenv requirements --dev | grep -vE '^-e |git\+' > "$RUNNER_TEMP/head-req.txt"
           pip-audit -r "$RUNNER_TEMP/head-req.txt" --no-deps --disable-pip --progress-spinner off \
             -f json -o "$RUNNER_TEMP/head.json" || true
       - name: Audit base branch
         if: github.event_name == 'pull_request'
         run: |
           git worktree add -q "$RUNNER_TEMP/base" "${{ github.event.pull_request.base.sha }}"
-          (cd "$RUNNER_TEMP/base" && pipenv requirements) | grep -vE '^-e |git\+' > "$RUNNER_TEMP/base-req.txt"
+          (cd "$RUNNER_TEMP/base" && pipenv requirements --dev) | grep -vE '^-e |git\+' > "$RUNNER_TEMP/base-req.txt"
           pip-audit -r "$RUNNER_TEMP/base-req.txt" --no-deps --disable-pip --progress-spinner off \
             -f json -o "$RUNNER_TEMP/base.json" || true
       - name: Fail on newly introduced vulnerabilities
