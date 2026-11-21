@@ -1,0 +1,6 @@
+# Findings in old commits that were assessed and accepted.
+# Reasoning per fingerprint: docs/security-findings.md (#39).
+861d24574f0280dd072789622035e7c2f8ca65f0:flathunter/captcha/twocaptcha_solver.py:generic-api-key:43
+861d24574f0280dd072789622035e7c2f8ca65f0:flathunter/captcha/twocaptcha_solver.py:generic-api-key:130
+fd8d28ee99d50746a583cc441438d512762803ca:test/fixtures/immo-scout-IS24-object.json:generic-api-key:1
+fd8d28ee99d50746a583cc441438d512762803ca:test/fixtures/immo-scout-IS24-object.json:gcp-api-key:1
