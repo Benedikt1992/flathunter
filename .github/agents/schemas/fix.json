@@ -6,4 +6,4 @@
   "replies":{"type":"array","items":{"type":"object","additionalProperties":false,
     "required":["reply_to_id","body"],
     "properties":{"reply_to_id":{"type":"integer"},"body":{"type":"string"}}}},
-  "open_questions":{"type":"array","items":{"type":"string"}}}}
+  "open_questions":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["question"],"properties":{"question":{"type":"string","description":"Exactly one question, understandable on its own"},"context":{"type":"string","description":"Why you ask, the options and your recommendation"},"path":{"type":"string","description":"Repo-relative file the question is about"},"line":{"type":"integer","description":"Line in the new version of that file"}}}}}}

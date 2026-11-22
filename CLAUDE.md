@@ -118,7 +118,8 @@ Bei Widerspruch gilt die strengere Regel.
     diese Dateien sind wie `CLAUDE.md` geschützt. Die Änderung wird im PR vorgenommen und
     begründet; der Reviewer prüft sie gegen das Issue, der Maintainer entscheidet mit dem Merge.
 13. **Bei echten Unklarheiten** oder einer Entscheidung, die über das Issue hinausgeht:
-    Frage stellen (der Workflow kommentiert sie als `open_questions` im Issue) und stoppen,
+    Frage stellen (der Workflow postet jede Frage aus `open_questions` als eigenen Kommentar im Issue
+    bzw. als eigenen Review-Thread im PR) und stoppen,
     statt zu raten.
 
 ## Agent workflow

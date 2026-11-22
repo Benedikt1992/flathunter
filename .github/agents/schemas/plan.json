@@ -4,4 +4,4 @@
   "plan_markdown":{"type":"string","description":"The implementation plan in markdown"},
   "size":{"type":"string","enum":["S","M","L","too-large"]},
   "architecture_impact":{"type":"string","enum":["none","within-rules","needs-adr"]},
-  "open_questions":{"type":"array","items":{"type":"string"}}}}
+  "open_questions":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["question"],"properties":{"question":{"type":"string","description":"Exactly one question, understandable on its own"},"context":{"type":"string","description":"Why you ask, the options and your recommendation"}}}}}}

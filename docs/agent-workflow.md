@@ -33,7 +33,7 @@ Issue ──(maintainer: agent:plan)──► Planner ──► plan comment ─
 | Have an issue implemented | Write it with the **Task** template (clear acceptance criteria!), add `agent:ready` |
 | Work through a series of dependent issues | Add `agent:ready` to all of them. Issues whose `Blockiert durch:` / `Blocked by:` issues are still open wait (`agent:waiting`) and start automatically, lowest number first, once those are closed |
 | See the approach first (larger issues) | Add `agent:plan`, read the plan, then add `agent:ready` (or comment and re-add `agent:plan`) |
-| Answer an agent's open questions (`agent:blocked`) | Comment on the issue, re-add `agent:ready` |
+| Answer an agent's open questions (`agent:blocked`, plan, PR) | Answer each question in its own conversation (see below), then re-add `agent:plan` or `agent:ready`, or submit a review with **Request changes** |
 | Review a finished PR | PRs labelled `needs-human` request your review. Use "Files changed → Changes since your last review" in later rounds |
 | Get local changes | **Request changes** with inline comments. The fixer implements each point, replies per thread (doesn't resolve them), then CI + reviewer run again and you are requested again |
 | Stop an agent PR | Close it. Re-add `agent:ready` on the issue (after deleting the branch) to start over |
@@ -46,6 +46,24 @@ Issue ──(maintainer: agent:plan)──► Planner ──► plan comment ─
 | Local | "rename this", "edge case missing" | Review comment on the PR |
 | Spec was wrong/incomplete | "should also support X" | Update the issue's acceptance criteria; for big changes close the PR and restart |
 | General rule | "we never log directly", "no new deps for this" | Additionally change `CLAUDE.md` / `ARCHITECTURE.md` / an ADR, and if possible a CI rule (`.importlinter`, pylint, guard). The fixer suggests such rule changes in its round summary |
+
+### Answering an agent's questions
+
+Every question of an agent is its own conversation, with a visible ID (`**Question Q3**`).
+The plan, blocked and round comments only say how many questions there are.
+
+- **Before a PR exists** (planner, blocked implementer): one issue comment per question.
+  Answer with **Quote reply** on that comment, or start your comment with the ID (`Q3: yes`).
+  Quoting several questions answers all of them. Then re-add `agent:plan` or `agent:ready`.
+- **On a PR** (finished implementer, fixer): one review thread per question. Inline if the
+  question is about a changed line, otherwise on the file or as a PR comment. Reply in the
+  thread (PR comments: Quote reply or `Q3:`), then submit a review with **Request changes**.
+- The next run sees every question with its status (`beantwortet` or `offen`) and your
+  answers. Only your answers count; comments of others never reach an agent. Unresolved
+  question threads block the merge (conversation resolution), so none gets lost.
+- IDs are unique per issue and per PR, they do not continue from one to the other.
+- Workflow patch note: the agent app cannot push `.github/workflows/`, so the workflow
+  changes of this feature come as a patch in the PR description.
 
 If a PR is fundamentally on the wrong track: close it, sharpen the issue (acceptance
 criteria, non-goals, hints on the approach), and restart with `agent:plan`.

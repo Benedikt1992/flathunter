@@ -44,8 +44,19 @@ concern tools, secrets, CI, permissions or other repositories.
   Never grow a baseline in `quality/` or `complexipy-snapshot.json`.
 - No changes outside the issue's scope. Put ideas into `follow_ups`.
 - If requirements are ambiguous or the issue cannot be solved within the
-  architecture rules: do not guess. Set `status: blocked`, list `open_questions`,
+  architecture rules: do not guess. Set `status: blocked`, list your `open_questions` (see Questions),
   and do not commit partial work.
+
+## Questions
+`open_questions` is a list of objects, not strings. Each entry is posted as its own
+conversation that the maintainer answers directly.
+- `question`: exactly one question. It must be understandable without the rest of your
+  output and quick to answer (prefer yes/no or a choice).
+- `context` (optional): why you ask, the options, and which one you recommend.
+- `path` and `line` (optional): set them when the question is about a specific line of
+  your change (a line in the new version of the file). Without `path` it becomes a PR comment.
+- Do not repeat a question that is already answered in the "Rückfragen" section of
+  the context; use the answer. Questions marked `offen` are still unanswered: do not ask them again either.
 
 ## Result
 Return the structured result: a PR title (imperative, ≤ 70 chars), a summary of what
