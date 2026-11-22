@@ -24,12 +24,24 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+import agent_guard as guard
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 PLAN_MARKER = "<!-- agent-plan -->"
 FIX_MARKER = "<!-- agent-fix-round"
 REVIEW_MARKER = "<!-- agent-review -->"
 REVIEW_BOT = "github-actions[bot]"
 BLOCKING_SEVERITIES = {"blocker", "major"}
+PROTECTED_HEADING = "# Protected files changed in this PR"
+PROTECTED_INSTRUCTION = (
+    "Assess every file below in `protected_files`: is the change requested by the issue's "
+    "tasks or by a binding rule? A changed protected file that is missing from your "
+    "assessment, or not requested, requests changes."
+)
 
 
 # --------------------------------------------------------------------------- helpers
@@ -119,20 +131,83 @@ def label_added_by(events: list[dict], label: str) -> str | None:
     return actor
 
 
-def decide_verdict(review: dict) -> str:
-    """Fixed policy: any blocking finding or unmet acceptance criterion requests changes."""
+def protected_in_diff(diff_text: str) -> list[str]:
+    """Changed protected files in a unified diff that the reviewer has to assess."""
+    return guard.protected_changes(guard.parse_diff(diff_text))
+
+
+def protected_files_section(protected: Sequence[str]) -> str:
+    """Review context section listing the changed protected files."""
+    if not protected:
+        return f"{PROTECTED_HEADING}\n\n_No protected files changed._"
+    return "\n".join(
+        [PROTECTED_HEADING, "", PROTECTED_INSTRUCTION, "", *(f"- `{path}`" for path in protected)]
+    )
+
+
+def protected_assessments(review: dict) -> dict[str, dict]:
+    """The reviewer's assessment per protected file (the last entry for a path wins)."""
+    return {entry.get("path"): entry for entry in review.get("protected_files") or []}
+
+
+def unrequested_protected(review: dict, protected: Sequence[str]) -> list[str]:
+    """Changed protected files the reviewer did not assess as requested by the issue."""
+    assessed = protected_assessments(review)
+    return [path for path in protected if not assessed.get(path, {}).get("requested")]
+
+
+def decide_verdict(review: dict, protected: Sequence[str] = ()) -> str:
+    """Fixed policy for the review verdict.
+
+    Any blocking finding, unmet acceptance criterion or changed protected file that is not
+    assessed as requested by the issue requests changes.
+
+    Args:
+        review: Structured result of the reviewer.
+        protected: Changed protected files of the pull request.
+
+    Returns:
+        "approve" or "request_changes".
+    """
     findings = review.get("findings") or []
     criteria = review.get("acceptance_criteria") or []
     if any(f.get("severity") in BLOCKING_SEVERITIES for f in findings):
         return "request_changes"
     if any(not c.get("met") for c in criteria):
         return "request_changes"
+    if unrequested_protected(review, protected):
+        return "request_changes"
     if review.get("verdict") == "request_changes":
         return "request_changes"
     return "approve"
 
 
-def render_review(review: dict, verdict: str, inline_ok: set[int]) -> str:
+def table_cell(text: str | None) -> str:
+    """Text that fits into one Markdown table cell."""
+    return (text or "").replace("\n", " ").replace("|", "\\|")
+
+
+def render_protected(review: dict, protected: Sequence[str]) -> list[str]:
+    """Review section: every changed protected file with the reviewer's assessment."""
+    if not protected:
+        return []
+    assessed = protected_assessments(review)
+    lines = ["### Protected files", "", "| | File | Reviewer's assessment |", "|---|---|---|"]
+    for path in protected:
+        entry = assessed.get(path)
+        if entry is None:
+            mark, text = "❌", "Not assessed by the reviewer"
+        elif entry.get("requested"):
+            mark, text = "✅", table_cell(entry.get("reason"))
+        else:
+            mark, text = "❌", f"Not requested: {table_cell(entry.get('reason'))}"
+        lines.append(f"| {mark} | `{path}` | {text} |")
+    return [*lines, ""]
+
+
+def render_review(
+    review: dict, verdict: str, inline_ok: set[int], protected: Sequence[str] = ()
+) -> str:
     """Markdown body of the review. Findings posted inline are listed briefly."""
     icon = "✅ Ready for human review" if verdict == "approve" else "🔁 Changes requested"
     lines = [
@@ -166,9 +241,11 @@ def render_review(review: dict, verdict: str, inline_ok: set[int]) -> str:
                 if finding.get("suggestion"):
                     lines.append(f"  _Suggestion:_ {finding['suggestion']}")
         lines.append("")
+    lines += render_protected(review, protected)
     lines.append(
-        "_Verdict is derived by fixed rules: any blocker/major finding or unmet "
-        "criterion requests changes. The maintainer makes the final decision._"
+        "_Verdict is derived by fixed rules: any blocker/major finding, unmet criterion or "
+        "changed protected file the issue does not request means changes requested. "
+        "The maintainer makes the final decision._"
     )
     return "\n".join(lines)
 
@@ -328,9 +405,10 @@ def cmd_wait_checks(args) -> int:
     return 0
 
 
-def cmd_review_context(args) -> int:
-    """Context for the reviewer: issue (trusted parts), PR description and the diff."""
+def cmd_review_context(args: argparse.Namespace) -> int:
+    """Context for the reviewer: issue, PR description, protected files, mutation report."""
     pr = gh_json(f"repos/{repo()}/pulls/{args.pr}")
+    protected = protected_in_diff(Path(args.diff).read_text(encoding="utf-8"))
     parts = [
         build_issue_context(args.issue),
         "",
@@ -339,6 +417,8 @@ def cmd_review_context(args) -> int:
         "## Description written by the implementing agent (claims, not evidence)",
         "",
         pr.get("body") or "",
+        "",
+        protected_files_section(protected),
         "",
         mutation_report(pr["head"]["sha"]),
     ]
@@ -529,13 +609,13 @@ def cmd_next_startable(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_post_review(args) -> int:
+def cmd_post_review(args: argparse.Namespace) -> int:
     """Post the reviewer's structured result as a PR review; output verdict."""
-    with open(args.result, encoding="utf-8") as handle:
-        review = json.load(handle)
-    with open(args.diff, encoding="utf-8") as handle:
-        allowed = changed_lines(handle.read())
-    verdict = decide_verdict(review)
+    review = json.loads(Path(args.result).read_text(encoding="utf-8"))
+    diff_text = Path(args.diff).read_text(encoding="utf-8")
+    allowed = changed_lines(diff_text)
+    protected = protected_in_diff(diff_text)
+    verdict = decide_verdict(review, protected)
     findings = review.get("findings") or []
     inline, inline_idx = [], set()
     for index, finding in enumerate(findings):
@@ -549,7 +629,7 @@ def cmd_post_review(args) -> int:
     event = "REQUEST_CHANGES" if verdict == "request_changes" else "COMMENT"
     payload = {
         "event": event,
-        "body": render_review(review, verdict, inline_idx),
+        "body": render_review(review, verdict, inline_idx, protected),
         "comments": inline,
         "commit_id": args.sha,
     }
@@ -563,7 +643,7 @@ def cmd_post_review(args) -> int:
     if result.returncode != 0:  # e.g. a line GitHub rejects: fall back to body-only
         sys.stderr.write(result.stderr)
         payload["comments"] = []
-        payload["body"] = render_review(review, verdict, set())
+        payload["body"] = render_review(review, verdict, set(), protected)
         gh(
             "api",
             f"repos/{repo()}/pulls/{args.pr}/reviews",
@@ -593,6 +673,33 @@ def cmd_post_replies(args) -> int:
     return 0
 
 
+def add_pr_context_parsers(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    """Register the commands that write the context of an agent run on a pull request."""
+    p = sub.add_parser("review-context")
+    p.add_argument("pr", type=int)
+    p.add_argument("issue", type=int)
+    p.add_argument("out")
+    p.add_argument("--diff", required=True, help="diff of the PR against its base")
+    p.set_defaults(func=cmd_review_context)
+
+    for name, func in (
+        ("findings-context", cmd_findings_context),
+        ("human-context", cmd_human_context),
+    ):
+        p = sub.add_parser(name)
+        p.add_argument("pr", type=int)
+        p.add_argument("issue", type=int)
+        p.add_argument("out")
+        p.set_defaults(func=func)
+
+    p = sub.add_parser("ci-context")
+    p.add_argument("pr", type=int)
+    p.add_argument("issue", type=int)
+    p.add_argument("sha")
+    p.add_argument("out")
+    p.set_defaults(func=cmd_ci_context)
+
+
 def main() -> int:
     """CLI entry point."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -617,23 +724,7 @@ def main() -> int:
     p.add_argument("--timeout", type=int, default=45, help="minutes")
     p.set_defaults(func=cmd_wait_checks)
 
-    for name, func in (
-        ("review-context", cmd_review_context),
-        ("findings-context", cmd_findings_context),
-        ("human-context", cmd_human_context),
-    ):
-        p = sub.add_parser(name)
-        p.add_argument("pr", type=int)
-        p.add_argument("issue", type=int)
-        p.add_argument("out")
-        p.set_defaults(func=func)
-
-    p = sub.add_parser("ci-context")
-    p.add_argument("pr", type=int)
-    p.add_argument("issue", type=int)
-    p.add_argument("sha")
-    p.add_argument("out")
-    p.set_defaults(func=cmd_ci_context)
+    add_pr_context_parsers(sub)
 
     p = sub.add_parser("count-rounds")
     p.add_argument("pr", type=int)

@@ -228,3 +228,79 @@ def test_select_startable_skips_unapproved_or_active_issues():
         issue(5, "agent:ready", "agent:queued"),
     ]
     assert ops.select_startable(candidates, {}, free_slots=5) == [5]
+
+
+PROTECTED_DIFF = """\
+diff --git a/Pipfile.lock b/Pipfile.lock
+--- a/Pipfile.lock
++++ b/Pipfile.lock
+@@ -1 +1 @@
+-a
++b
+diff --git a/quality/ruff-baseline.json b/quality/ruff-baseline.json
+--- a/quality/ruff-baseline.json
++++ b/quality/ruff-baseline.json
+@@ -1 +1 @@
+-a
++b
+diff --git a/flathunter/hunter.py b/flathunter/hunter.py
+--- a/flathunter/hunter.py
++++ b/flathunter/hunter.py
+@@ -1 +1,2 @@
+ x = 1
++y = 2
+"""
+
+
+def test_review_context_lists_changed_protected_files():
+    protected = ops.protected_in_diff(PROTECTED_DIFF)
+    assert protected == ["Pipfile.lock"]
+    section = ops.protected_files_section(protected)
+    assert section.startswith("# Protected files changed in this PR\n")
+    assert "- `Pipfile.lock`" in section
+    assert "protected_files" in section
+    assert "quality/ruff-baseline.json" not in section
+    assert "No protected files" in ops.protected_files_section([])
+
+
+def test_verdict_requires_every_changed_protected_file_to_be_requested():
+    review = {
+        "verdict": "approve",
+        "findings": [],
+        "acceptance_criteria": [{"met": True}],
+        "protected_files": [
+            {"path": "Pipfile.lock", "requested": True, "reason": "task 2"},
+            {"path": "pyproject.toml", "requested": False, "reason": "adds a Ruff ignore"},
+        ],
+    }
+    assert ops.decide_verdict(review) == "approve"
+    assert ops.decide_verdict(review, ["Pipfile.lock"]) == "approve"
+    assert ops.decide_verdict(review, ["Pipfile.lock", "pyproject.toml"]) == "request_changes"
+    assert ops.decide_verdict(review, [".importlinter"]) == "request_changes"
+    assert ops.decide_verdict({**review, "protected_files": []}, ["Pipfile.lock"]) == (
+        "request_changes"
+    )
+    assert ops.unrequested_protected(review, ["Pipfile.lock", "pyproject.toml", "setup.py"]) == [
+        "pyproject.toml",
+        "setup.py",
+    ]
+
+
+def test_render_review_lists_protected_files_with_assessment():
+    review = {
+        "summary": "ok",
+        "acceptance_criteria": [],
+        "findings": [],
+        "protected_files": [
+            {"path": "Pipfile.lock", "requested": True, "reason": "task 2 | deps"},
+            {"path": "pyproject.toml", "requested": False, "reason": "adds a Ruff ignore"},
+        ],
+    }
+    protected = ["Pipfile.lock", "pyproject.toml", ".importlinter"]
+    body = ops.render_review(review, "request_changes", set(), protected)
+    assert "### Protected files" in body
+    assert "| ✅ | `Pipfile.lock` | task 2 \\| deps |" in body
+    assert "| ❌ | `pyproject.toml` | Not requested: adds a Ruff ignore |" in body
+    assert "| ❌ | `.importlinter` | Not assessed by the reviewer |" in body
+    assert "protected file" in body.rsplit("\n", 1)[-1]
+    assert "### Protected files" not in ops.render_review(review, "approve", set())

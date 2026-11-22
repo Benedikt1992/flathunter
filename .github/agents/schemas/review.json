@@ -1,11 +1,14 @@
 {"type":"object","additionalProperties":false,
- "required":["verdict","summary","acceptance_criteria","findings"],
+ "required":["verdict","summary","acceptance_criteria","protected_files","findings"],
  "properties":{
   "verdict":{"type":"string","enum":["approve","request_changes"]},
   "summary":{"type":"string"},
   "acceptance_criteria":{"type":"array","items":{"type":"object","additionalProperties":false,
     "required":["criterion","met","evidence"],
     "properties":{"criterion":{"type":"string"},"met":{"type":"boolean"},"evidence":{"type":"string"}}}},
+  "protected_files":{"type":"array","items":{"type":"object","additionalProperties":false,
+    "required":["path","requested","reason"],
+    "properties":{"path":{"type":"string"},"requested":{"type":"boolean"},"reason":{"type":"string"}}}},
   "findings":{"type":"array","items":{"type":"object","additionalProperties":false,
     "required":["severity","category","title","detail"],
     "properties":{
