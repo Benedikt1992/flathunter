@@ -2,12 +2,16 @@
 """Deterministic PR guard: detects changes that weaken quality gates.
 
 Fails a pull request that
-  * touches protected files (CI, lint/type/coverage/architecture config, agent rules, deps),
   * adds lint/type/coverage/security suppressions or skips tests,
+  * grows a ratchet baseline (accepting new violations is a suppression too),
   * deletes test files or test functions,
 unless the maintainer explicitly allowed it by adding the matching override label
-(``allow-protected-change``, ``allow-suppression``, ``allow-test-removal``).
+(``allow-suppression``, ``allow-test-removal``).
 Only labels added by the maintainer count; labels added by bots or agents are ignored.
+
+Changes to other protected files (CI, lint/type/coverage/architecture config, agent
+rules, dependencies) are reported, not blocked: the independent reviewer checks each one
+against the issue, and the maintainer decides with the merge (ADR 0003).
 
 For pull requests authored by the maintainer the findings are reported but do not fail.
 
@@ -25,6 +29,7 @@ import subprocess
 import sys
 import urllib.request
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import ratchet
@@ -71,9 +76,12 @@ SUPPRESSION_PATTERNS = [
 
 TEST_FUNC = re.compile(r"^\s*(?:async\s+)?def\s+(test_\w+)\s*\(")
 
-LABEL_PROTECTED = "allow-protected-change"
 LABEL_SUPPRESSION = "allow-suppression"
 LABEL_TEST_REMOVAL = "allow-test-removal"
+PROTECTED_NOTE = (
+    "Protected files changed (no label needed: the independent reviewer checks each one "
+    "against the issue, the maintainer decides with the merge):"
+)
 
 
 @dataclass
@@ -87,9 +95,9 @@ class FileDiff:
     removed: list[str] = field(default_factory=list)
 
 
-@dataclass
+@dataclass(frozen=True)
 class Finding:
-    """A single guard violation and the label that would allow it."""
+    """A blocking guard violation and the label that would allow it."""
 
     label: str
     message: str
@@ -130,50 +138,156 @@ def is_test_file(path: str) -> bool:
     return path.endswith(".py") and (name.startswith("test_") or name.endswith("_test.py"))
 
 
+def is_ratchet_baseline(path: str) -> bool:
+    """True for the ratchet baselines, which may only shrink (checked by the guard itself)."""
+    return path in ratchet.RATCHET_FILES
+
+
+def touched_paths(diff: FileDiff) -> list[str]:
+    """Old and new path of a changed file (a single path unless it was renamed)."""
+    return sorted({diff.path, diff.old_path or diff.path})
+
+
+def protected_changes(files: list[FileDiff]) -> list[str]:
+    """Changed protected files the reviewer has to assess, ratchet baselines excluded.
+
+    Args:
+        files: Parsed diff.
+
+    Returns:
+        Sorted paths (old and new path of renamed files).
+    """
+    return sorted(
+        {
+            path
+            for diff in files
+            for path in touched_paths(diff)
+            if is_protected(path) and not is_ratchet_baseline(path)
+        }
+    )
+
+
+def baseline_findings(diff: FileDiff, shrink_ok: Callable[[str], bool]) -> list[Finding]:
+    """A ratchet baseline that does not only shrink accepts new violations."""
+    return [
+        Finding(LABEL_SUPPRESSION, f"`{path}` grows a ratchet baseline (accepts new violations)")
+        for path in touched_paths(diff)
+        if is_ratchet_baseline(path) and not shrink_ok(path)
+    ]
+
+
+def suppression_findings(diff: FileDiff) -> list[Finding]:
+    """Suppression comments and skipped tests added to a Python file."""
+    if not diff.path.endswith(".py"):
+        return []
+    return [
+        Finding(
+            LABEL_SUPPRESSION,
+            f"`{diff.path}` adds a suppression ({name}): `{line.strip()[:120]}`",
+        )
+        for line in diff.added
+        for pattern, name in SUPPRESSION_PATTERNS
+        if pattern.search(line)
+    ]
+
+
+def test_removal_findings(diff: FileDiff) -> list[Finding]:
+    """A deleted test module or test functions that disappear from one."""
+    if not is_test_file(diff.old_path or diff.path):
+        return []
+    if diff.deleted:
+        return [Finding(LABEL_TEST_REMOVAL, f"test file `{diff.path}` is deleted")]
+    removed = {m.group(1) for line in diff.removed if (m := TEST_FUNC.match(line))}
+    added = {m.group(1) for line in diff.added if (m := TEST_FUNC.match(line))}
+    return [
+        Finding(LABEL_TEST_REMOVAL, f"test `{name}` is removed from `{diff.path}`")
+        for name in sorted(removed - added)
+    ]
+
+
 def find_violations(
     files: list[FileDiff], shrink_ok: Callable[[str], bool] = lambda _path: False
 ) -> list[Finding]:
-    """Return every guard violation in the diff.
+    """Return every blocking guard violation in the diff, without duplicates.
 
-    `shrink_ok(path)` returns True for ratchet baselines whose change only removes debt;
-    those may change without the maintainer's label.
+    Changes to other protected files are no violations; `protected_changes` lists them
+    for the reviewer.
+
+    Args:
+        files: Parsed diff.
+        shrink_ok: True for a ratchet baseline whose change only removes debt; such a
+            change needs no label.
+
+    Returns:
+        The violations in diff order.
     """
-    findings: list[Finding] = []
-    for diff in files:
-        for path in {diff.path, diff.old_path or diff.path}:
-            if is_protected(path) and not shrink_ok(path):
-                findings.append(Finding(LABEL_PROTECTED, f"`{path}` is a protected file"))
+    findings = [
+        finding
+        for diff in files
+        for finding in (
+            *baseline_findings(diff, shrink_ok),
+            *suppression_findings(diff),
+            *test_removal_findings(diff),
+        )
+    ]
+    return list(dict.fromkeys(findings))
 
-        if diff.path.endswith(".py"):
-            for line in diff.added:
-                for pattern, name in SUPPRESSION_PATTERNS:
-                    if pattern.search(line):
-                        findings.append(
-                            Finding(
-                                LABEL_SUPPRESSION,
-                                f"`{diff.path}` adds a suppression ({name}): `{line.strip()[:120]}`",
-                            )
-                        )
 
-        if is_test_file(diff.old_path or diff.path):
-            if diff.deleted:
-                findings.append(Finding(LABEL_TEST_REMOVAL, f"test file `{diff.path}` is deleted"))
-            else:
-                removed = {m.group(1) for line in diff.removed if (m := TEST_FUNC.match(line))}
-                added = {m.group(1) for line in diff.added if (m := TEST_FUNC.match(line))}
-                for name in sorted(removed - added):
-                    findings.append(
-                        Finding(LABEL_TEST_REMOVAL, f"test `{name}` is removed from `{diff.path}`")
-                    )
-    # de-duplicate while keeping order
-    seen: set[tuple[str, str]] = set()
-    unique = []
-    for finding in findings:
-        key = (finding.label, finding.message)
-        if key not in seen:
-            seen.add(key)
-            unique.append(finding)
-    return unique
+def split_by_grant(
+    findings: list[Finding], granted: set[str]
+) -> tuple[list[Finding], list[Finding]]:
+    """Split findings into blocking and allowed ones.
+
+    Args:
+        findings: Guard violations.
+        granted: Override labels the maintainer has set on the pull request.
+
+    Returns:
+        (blocking, allowed): a finding is allowed only if its own label is granted.
+    """
+    blocking = [finding for finding in findings if finding.label not in granted]
+    allowed = [finding for finding in findings if finding.label in granted]
+    return blocking, allowed
+
+
+def render_report(
+    blocking: list[Finding],
+    allowed: list[Finding],
+    protected: list[str],
+    maintainer: str,
+    *,
+    by_maintainer: bool,
+) -> str:
+    """Markdown report for the job log and the step summary.
+
+    Args:
+        blocking: Violations without the maintainer's override label.
+        allowed: Violations the maintainer allowed.
+        protected: Changed protected files (reported, never blocking).
+        maintainer: Login of the maintainer.
+        by_maintainer: The pull request is authored by the maintainer.
+
+    Returns:
+        The report.
+    """
+    lines = ["## Agent guard", ""]
+    if not blocking and not allowed:
+        lines.append("No suppressions, removed tests or grown baselines. ✅")
+    lines += [
+        f"- ❌ {finding.message} — needs label `{finding.label}` from @{maintainer}"
+        for finding in blocking
+    ]
+    lines += [f"- ✅ {finding.message} — allowed by `{finding.label}`" for finding in allowed]
+    if protected:
+        lines += ["", PROTECTED_NOTE, "", *(f"- `{path}`" for path in protected)]
+    if blocking and by_maintainer:
+        lines += ["", "PR is authored by the maintainer: reported only, not failing."]
+    return "\n".join(lines)
+
+
+def exit_code(blocking: list[Finding], *, by_maintainer: bool) -> int:
+    """1 if blocking violations remain in a pull request not authored by the maintainer."""
+    return 1 if blocking and not by_maintainer else 0
 
 
 def labels_granted_by(events: list[dict], current_labels: set[str], maintainer: str) -> set[str]:
@@ -240,7 +354,8 @@ def main() -> int:
             kind, git_show(args.base, path), git_show(args.head, path)
         )
 
-    findings = find_violations(parse_diff(diff_text), shrink_ok)
+    files = parse_diff(diff_text)
+    findings = find_violations(files, shrink_ok)
 
     granted: set[str] = set()
     token = os.environ.get("GITHUB_TOKEN", "")
@@ -251,30 +366,18 @@ def main() -> int:
         events = github_get(f"{api}/events?per_page=100", token)
         granted = labels_granted_by(events, current, args.maintainer)
 
-    blocking = [f for f in findings if f.label not in granted]
-    allowed = [f for f in findings if f.label in granted]
+    blocking, allowed = split_by_grant(findings, granted)
     by_maintainer = args.author.lower() == args.maintainer.lower()
-
-    lines = ["## Agent guard", ""]
-    if not findings:
-        lines.append("No protected files, suppressions or removed tests. ✅")
-    for finding in blocking:
-        lines.append(
-            f"- ❌ {finding.message} — needs label `{finding.label}` from @{args.maintainer}"
-        )
-    for finding in allowed:
-        lines.append(f"- ✅ {finding.message} — allowed by `{finding.label}`")
-    if blocking and by_maintainer:
-        lines.append("")
-        lines.append("PR is authored by the maintainer: reported only, not failing.")
-    report = "\n".join(lines)
+    report = render_report(
+        blocking, allowed, protected_changes(files), args.maintainer, by_maintainer=by_maintainer
+    )
     print(report)
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary:
-        with open(summary, "a", encoding="utf-8") as handle:
+        with Path(summary).open("a", encoding="utf-8") as handle:
             handle.write(report + "\n")
 
-    return 1 if blocking and not by_maintainer else 0
+    return exit_code(blocking, by_maintainer=by_maintainer)
 
 
 if __name__ == "__main__":

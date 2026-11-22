@@ -1,6 +1,6 @@
 # 0001: Agent-driven issue implementation with independent quality control
 
-- **Status:** accepted
+- **Status:** accepted; decision 1 amended by [0003](0003-review-protected-files-instead-of-label.md)
 - **Date:** 2026-11-18
 
 ## Context

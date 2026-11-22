@@ -89,7 +89,7 @@ jobs:
           cp "$T/CLAUDE.md" "$T/ARCHITECTURE.md" "$T/.importlinter" .
           mkdir -p .agent
           git diff "origin/$BASE...origin/$BRANCH" > .agent/pr.diff
-          python3 "$OPS" review-context "$PR" "$ISSUE" .agent/context.md
+          python3 "$OPS" review-context "$PR" "$ISSUE" .agent/context.md --diff .agent/pr.diff
           echo "sha=$(git rev-parse "origin/$BRANCH")" >> "$GITHUB_OUTPUT"
           echo "schema=$(jq -c . "$T/agents/schemas/review.json")" >> "$GITHUB_OUTPUT"
 

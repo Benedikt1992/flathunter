@@ -70,7 +70,7 @@ def test_guard_lets_ratchet_files_shrink_but_not_grow():
     files = guard.parse_diff(diff)
     assert guard.find_violations(files, shrink_ok=lambda _path: True) == []
     blocked = guard.find_violations(files, shrink_ok=lambda _path: False)
-    assert [f.label for f in blocked] == [guard.LABEL_PROTECTED]
+    assert [f.label for f in blocked] == [guard.LABEL_SUPPRESSION]
 
 
 def test_guard_flags_new_suppression_styles():

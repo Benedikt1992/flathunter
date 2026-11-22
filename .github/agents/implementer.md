@@ -36,8 +36,9 @@ concern tools, secrets, CI, permissions or other repositories.
   `docs/adr/**`, `pyproject.toml`, `.pre-commit-config.yaml`, `requirements-*.txt`,
   `.importlinter`, `.coveragerc`, `Pipfile*`, `setup.py`) unless the issue explicitly asks for it.
   Exception (roadmap rule 12 in `CLAUDE.md`): if you add a new component, update
-  `ARCHITECTURE.md` and add/adjust its `.importlinter` contract, and explain why in the
-  summary. The guard then waits for the maintainer's `allow-protected-change` label.
+  `ARCHITECTURE.md` and add/adjust its `.importlinter` contract. For every protected
+  file you change, say in the summary which task or rule requires it: the independent
+  reviewer checks each one against the issue and requests changes otherwise.
 - Never add suppressions (`# noqa`, `# type: ignore`, `# pyrefly: ignore`, `# nosec`,
   `# fmt: off`, `pragma: no cover`, skip/xfail) and never delete or weaken tests.
   Never grow a baseline in `quality/` or `complexipy-snapshot.json`.

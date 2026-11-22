@@ -37,7 +37,7 @@ Issue ──(maintainer: agent:plan)──► Planner ──► plan comment ─
 | Review a finished PR | PRs labelled `needs-human` request your review. Use "Files changed → Changes since your last review" in later rounds |
 | Get local changes | **Request changes** with inline comments. The fixer implements each point, replies per thread (doesn't resolve them), then CI + reviewer run again and you are requested again |
 | Stop an agent PR | Close it. Re-add `agent:ready` on the issue (after deleting the branch) to start over |
-| Allow a gate exception | Add `allow-protected-change`, `allow-suppression` or `allow-test-removal` to the PR (only counts when you add it) |
+| Allow a gate exception | Add `allow-suppression` (also for a grown baseline) or `allow-test-removal` to the PR (only counts when you add it). Changed protected files need no label: the reviewer checks them, you decide with the merge |
 
 ### What kind of feedback goes where
 
@@ -71,16 +71,21 @@ other people never reaches a prompt except the issue body itself, which you appr
 
 ## Independence of quality control
 
-- **Gates are enforced by CI**, not by agent instructions, and are protected: changes to
-  `.github/`, gate configs, rules and dependencies fail the agent guard unless you allow
-  them, and need your code-owner review anyway. The agent app has no `workflows`
-  permission, so it cannot push workflow changes at all.
+- **Gates are enforced by CI**, not by agent instructions. The agent guard fails on the
+  typical shortcuts (suppressions, grown baselines, removed tests) unless you add the
+  matching `allow-*` label. Changes to protected files (`.github/`, gate configs, rules,
+  dependencies) are not blocked by a label: the guard lists them, the reviewer has to
+  assess each one against the issue, and they need your code-owner review anyway
+  ([ADR 0003](adr/0003-review-protected-files-instead-of-label.md)). The agent app has no
+  `workflows` permission, so it cannot push workflow changes at all.
 - **The reviewer is a different identity with read-only access**, runs only after CI is
   green, gets its prompt and rules from the default branch (a PR cannot weaken them),
   sees the issue and the diff but not the implementer's reasoning, and treats the PR
   description as a claim to verify.
 - **The verdict is computed by fixed rules** (`agent_ops.py decide_verdict`): any
-  blocker/major finding or unmet acceptance criterion means changes requested.
+  blocker/major finding, unmet acceptance criterion or changed protected file that the
+  reviewer did not assess as required by the issue means changes requested. The review
+  lists every changed protected file with the reviewer's assessment.
 - **Only you can approve and merge** (branch protection + CODEOWNERS).
 
 ## One-time setup
@@ -136,8 +141,8 @@ Actions → **Agent · Setup** → Run workflow.
 
 ### 7. First run
 Good first issue: *"Update dependencies with known vulnerabilities"* (the Security
-workflow's weekly report lists them). Note that this touches `Pipfile.lock`, so add
-`allow-protected-change` to the PR.
+workflow's weekly report lists them). It touches `Pipfile.lock`; the reviewer checks that
+the issue asks for it, no label needed.
 
 ## Dependencies between issues
 
@@ -165,7 +170,7 @@ The static gates are defined once in `.pre-commit-config.yaml` and run in three 
 All gates take about 1 second. Legacy debt sits in ratchet baselines (`quality/`,
 `complexipy-snapshot.json`): new violations fail, fixed debt has to be locked in with
 `python .github/scripts/ratchet.py prune`, and the guard rejects any baseline growth
-without your `allow-protected-change` label. Tooling rationale: [ADR 0002](adr/0002-python-quality-toolchain.md).
+without your `allow-suppression` label. Tooling rationale: [ADR 0002](adr/0002-python-quality-toolchain.md).
 
 ## Costs and limits
 Each implementation is one model session (≤ 120 turns), each review/fix round another one.
