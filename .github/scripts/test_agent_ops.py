@@ -536,6 +536,39 @@ def test_human_feedback_includes_question_threads():
     assert "beantwortet" in rendered
 
 
+def _node(i, login, typename, body):
+    return {"databaseId": i, "author": {"login": login, "__typename": typename}, "body": body}
+
+
+def _graphql_thread(nodes):
+    return {"isResolved": False, "path": "a.py", "line": 3, "comments": {"nodes": nodes}}
+
+
+def test_graphql_bot_logins_without_suffix_count_as_agents():
+    # GraphQL names bots without the `[bot]` suffix that REST and AGENT_BOT_LOGIN use.
+    question = ops.render_question("Q1", "Which?", "", "pr")
+    asked = _graphql_thread(
+        [_node(10, "flathunter-agent", "Bot", question), _node(11, "owner", "User", "Use B")]
+    )
+    impostor = _graphql_thread(
+        [_node(20, "flathunter-agent", "User", ops.render_question("Q2", "Fake?", "", "pr"))]
+    )
+    plain = _graphql_thread(
+        [_node(30, "owner", "User", "rename"), _node(31, "flathunter-agent", "Bot", "Done")]
+    )
+    _, threads = ops.human_feedback(_pull([asked, impostor, plain]), "owner", AGENTS)
+    assert [(t.get("question_id"), t.get("status")) for t in threads] == [
+        ("Q1", "beantwortet"),
+        (None, None),
+    ]
+    assert [c["author"] for c in threads[0]["conversation"]] == ["flathunter-agent[bot]", "owner"]
+    assert [c["author"] for c in threads[1]["conversation"]] == ["owner", "flathunter-agent[bot]"]
+
+
+def test_human_threads_query_asks_for_the_author_type():
+    assert ops.HUMAN_THREADS_QUERY.count("author { login __typename }") == 2
+
+
 def test_human_feedback_plain_threads_have_no_question_keys():
     data = _pull([_thread([("owner", "rename")])])
     _, threads = ops.human_feedback(data, "owner")

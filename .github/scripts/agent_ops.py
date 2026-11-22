@@ -612,10 +612,10 @@ HUMAN_THREADS_QUERY = """
 query($owner:String!, $name:String!, $pr:Int!) {
   repository(owner:$owner, name:$name) {
     pullRequest(number:$pr) {
-      reviews(last:20) { nodes { author { login } state body submittedAt } }
+      reviews(last:20) { nodes { author { login __typename } state body submittedAt } }
       reviewThreads(first:100) { nodes {
         isResolved path line
-        comments(first:50) { nodes { databaseId author { login } body } }
+        comments(first:50) { nodes { databaseId author { login __typename } body } }
       } }
     }
   }
@@ -623,8 +623,16 @@ query($owner:String!, $name:String!, $pr:Int!) {
 
 
 def _login(comment: dict) -> str:
-    """Author login of a GraphQL comment node ('' for deleted users)."""
-    return (comment.get("author") or {}).get("login") or ""
+    """Author login of a GraphQL comment node ('' for deleted users).
+
+    GraphQL names bots without the `[bot]` suffix that REST (and AGENT_BOT_LOGIN) use,
+    so the suffix is added for authors of type Bot. A user with the same name stays a user.
+    """
+    author = comment.get("author") or {}
+    login = author.get("login") or ""
+    if author.get("__typename") == "Bot" and login and not login.endswith("[bot]"):
+        return f"{login}[bot]"
+    return login
 
 
 def is_agent(comment: dict, logins: Sequence[str]) -> bool:
