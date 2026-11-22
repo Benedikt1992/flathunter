@@ -35,6 +35,24 @@ PLAN_MARKER = "<!-- agent-plan -->"
 FIX_MARKER = "<!-- agent-fix-round"
 REVIEW_MARKER = "<!-- agent-review -->"
 REVIEW_BOT = "github-actions[bot]"
+QUESTION_MARKER = "<!-- agent-question -->"
+QUESTION_HEADER = re.compile(r"\*\*Question (Q[0-9]+)\*\*")
+QUOTED_HEADER = re.compile(r"^>[ \t]*\*\*Question (Q[0-9]+)\*\*[ \t]*$", re.MULTILINE)
+ANSWER_PREFIX = re.compile(r"\s*(Q[0-9]+)[ \t]*:")
+HEADER_LINES = 2
+STATUS_ANSWERED = "beantwortet"
+STATUS_OPEN = "offen"
+ANSWER_HOWTO = {
+    "issue": (
+        "_To answer, use **Quote reply** on this comment or start your comment with `{qid}:`. "
+        "Then re-add `agent:plan` (or `agent:ready`) to restart the agent._"
+    ),
+    "pr": (
+        "_To answer, reply in this thread (on a PR-level comment: use **Quote reply** or start "
+        "with `{qid}:`). Then submit a review with \u201cRequest changes\u201d to restart "
+        "the agent._"
+    ),
+}
 BLOCKING_SEVERITIES = {"blocker", "major"}
 PROTECTED_HEADING = "# Protected files changed in this PR"
 PROTECTED_INSTRUCTION = (
@@ -120,6 +138,131 @@ def trusted_issue_comments(comments: list[dict], owner: str) -> list[dict]:
         ):
             trusted.append(comment)
     return trusted
+
+
+# --------------------------------------------------------------------------- questions
+
+
+def agent_logins() -> tuple[str, ...]:
+    """Identities whose questions count: the workflow bot and the agent app (AGENT_BOT_LOGIN)."""
+    app = os.environ.get("AGENT_BOT_LOGIN", "").strip()
+    return (REVIEW_BOT, app) if app else (REVIEW_BOT,)
+
+
+def _quote(text: str) -> str:
+    """Prefix every line with `> `, so quoting it again never yields a level-1 header."""
+    return "\n".join(f"> {line}" for line in text.splitlines() or [""])
+
+
+def render_question(qid: str, question: str, context: str, phase: str) -> str:
+    """Markdown of one question comment: marker, visible ID header, text, how to answer."""
+    text = question.strip()
+    if context.strip():
+        text += "\n\n" + context.strip()
+    howto = ANSWER_HOWTO[phase].format(qid=qid)
+    return f"{QUESTION_MARKER}\n**Question {qid}**\n\n{_quote(text)}\n\n{howto}"
+
+
+def question_id(body: str | None) -> str | None:
+    """ID from the header line directly after the marker (nothing else is ever read)."""
+    lines = (body or "").replace("\r\n", "\n").split("\n")
+    if len(lines) < HEADER_LINES or lines[0] != QUESTION_MARKER:
+        return None
+    match = QUESTION_HEADER.fullmatch(lines[1].rstrip())
+    return match.group(1) if match else None
+
+
+def is_agent_question(comment: dict, logins: Sequence[str]) -> bool:
+    """A question counts only if an agent identity wrote it and it carries the marker."""
+    login = (comment.get("user") or {}).get("login")
+    body = comment.get("body") or ""
+    return any(same_login(login, agent) for agent in logins) and question_id(body) is not None
+
+
+def next_question_ids(existing: set[str], count: int) -> list[str]:
+    """`count` new IDs that continue after the highest ID in `existing`."""
+    highest = max((int(i[1:]) for i in existing), default=0)
+    return [f"Q{highest + offset}" for offset in range(1, count + 1)]
+
+
+def questions_pointer(count: int, phase: str) -> str:
+    """One line for the plan/blocked/round comment; the questions themselves are not listed."""
+    if count <= 0:
+        return ""
+    noun = "question" if count == 1 else "questions"
+    where = "one comment each below" if phase == "issue" else "one review thread each on the PR"
+    return f"{count} {noun}, {where}."
+
+
+def answer_ids(body: str | None, known: set[str]) -> set[str]:
+    """Known question IDs a comment answers: quoted headers plus a leading `Qn:`."""
+    text = (body or "").replace("\r\n", "\n")
+    found = set(QUOTED_HEADER.findall(text))
+    prefix = ANSWER_PREFIX.match(text)
+    if prefix:
+        found.add(prefix.group(1))
+    return found & known
+
+
+def question_text(body: str) -> str:
+    """The question and context of a rendered question comment, without quote markers."""
+    lines = body.replace("\r\n", "\n").split("\n")[2:]
+    quoted = [line for line in lines if line.startswith(">")]
+    return "\n".join(line[2:] if line.startswith("> ") else line[1:] for line in quoted).strip()
+
+
+def split_issue_comments(
+    comments: list[dict], owner: str, logins: Sequence[str]
+) -> tuple[list[dict], dict[str, list[dict]], list[dict]]:
+    """Split comments into agent questions, maintainer answers per question, and the rest.
+
+    Returns:
+        (questions, answers_by_id, general). Only the maintainer answers; comments of
+        third parties and forged question comments appear in none of the three.
+    """
+    questions: list[dict] = []
+    for comment in comments:
+        qid = question_id(comment.get("body")) if is_agent_question(comment, logins) else None
+        if qid and all(q["id"] != qid for q in questions):
+            questions.append({"id": qid, "text": question_text(comment["body"])})
+    known = {q["id"] for q in questions}
+    answers: dict[str, list[dict]] = {qid: [] for qid in known}
+    general: list[dict] = []
+    for comment in trusted_issue_comments(comments, owner):
+        if is_agent_question(comment, logins):
+            continue
+        by_owner = same_login((comment.get("user") or {}).get("login"), owner)
+        ids = answer_ids(comment.get("body"), known) if by_owner else set()
+        for qid in ids:
+            answers[qid].append(comment)
+        if not ids:
+            general.append(comment)
+    return questions, answers, general
+
+
+def render_questions_section(
+    questions: list[dict], answers: dict[str, list[dict]], heading: str = "## Rückfragen"
+) -> str:
+    """Context section: every question with its status and the maintainer's answers."""
+    parts = [heading, ""]
+    for question in questions:
+        given = answers.get(question["id"], [])
+        status = STATUS_ANSWERED if given else STATUS_OPEN
+        parts += [f"### {question['id']} — {status}", "", question["text"], ""]
+        for answer in given:
+            who = answer["user"]["login"]
+            parts += [f"**Answer from {who}:**", "", answer.get("body") or "", ""]
+    return "\n".join(parts)
+
+
+def question_placement(question: dict, allowed: dict[str, set[int]]) -> dict:
+    """Where a PR-phase question goes: inline on a changed line, on the file, or on the PR."""
+    path, line = question.get("path"), question.get("line")
+    if not isinstance(path, str) or not path:
+        return {"kind": "pr"}
+    if isinstance(line, int) and not isinstance(line, bool) and line in allowed.get(path, set()):
+        return {"kind": "inline", "path": path, "line": line}
+    return {"kind": "file", "path": path}
 
 
 def label_added_by(events: list[dict], label: str) -> str | None:
@@ -350,10 +493,12 @@ def build_issue_context(number: int) -> str:
             "",
         ]
     parts += [issue.get("body") or "_(no description)_", ""]
-    trusted = trusted_issue_comments(comments, maintainer())
-    if trusted:
+    questions, answers, general = split_issue_comments(comments, maintainer(), agent_logins())
+    if questions:
+        parts += [render_questions_section(questions, answers), ""]
+    if general:
         parts += ["## Comments (maintainer and agent plans only)", ""]
-        for comment in trusted:
+        for comment in general:
             who = comment["user"]["login"]
             parts += [f"### {who} — {comment['created_at']}", "", comment.get("body") or "", ""]
     return "\n".join(parts)
@@ -467,47 +612,102 @@ HUMAN_THREADS_QUERY = """
 query($owner:String!, $name:String!, $pr:Int!) {
   repository(owner:$owner, name:$name) {
     pullRequest(number:$pr) {
-      reviews(last:20) { nodes { author { login } state body submittedAt } }
+      reviews(last:20) { nodes { author { login __typename } state body submittedAt } }
       reviewThreads(first:100) { nodes {
         isResolved path line
-        comments(first:50) { nodes { databaseId author { login } body } }
+        comments(first:50) { nodes { databaseId author { login __typename } body } }
       } }
     }
   }
 }"""
 
 
-def human_feedback(data: dict, owner: str) -> tuple[str, list[dict]]:
-    """Latest maintainer review body and unresolved threads the maintainer participates in."""
+def _login(comment: dict) -> str:
+    """Author login of a GraphQL comment node ('' for deleted users).
+
+    GraphQL names bots without the `[bot]` suffix that REST (and AGENT_BOT_LOGIN) use,
+    so the suffix is added for authors of type Bot. A user with the same name stays a user.
+    """
+    author = comment.get("author") or {}
+    login = author.get("login") or ""
+    if author.get("__typename") == "Bot" and login and not login.endswith("[bot]"):
+        return f"{login}[bot]"
+    return login
+
+
+def is_agent(comment: dict, logins: Sequence[str]) -> bool:
+    """True if a GraphQL comment node was written by an agent identity."""
+    return any(same_login(_login(comment), agent) for agent in logins)
+
+
+def thread_view(thread: dict, owner: str, logins: Sequence[str]) -> dict | None:
+    """The part of an unresolved review thread an agent may see, or None to skip it."""
+    comments = thread["comments"]["nodes"]
+    if thread["isResolved"] or not comments:
+        return None
+    first = comments[0]
+    qid = question_id(first.get("body"))
+    is_question = qid is not None and is_agent(first, logins)
+    if not is_question and not any(same_login(_login(c), owner) for c in comments):
+        return None
+    view = {
+        "reply_to_id": first["databaseId"],
+        "path": thread["path"],
+        "line": thread["line"],
+    }
+    if is_question:
+        answered = any(same_login(_login(c), owner) for c in comments)
+        view["question_id"] = qid
+        view["status"] = STATUS_ANSWERED if answered else STATUS_OPEN
+    # only the maintainer's and the agents' own comments, never third parties or other bots
+    keep = [c for c in comments if same_login(_login(c), owner) or is_agent(c, logins)]
+    view["conversation"] = [{"author": _login(c), "body": c["body"]} for c in keep]
+    return view
+
+
+def human_feedback(
+    data: dict, owner: str, logins: Sequence[str] = (REVIEW_BOT,)
+) -> tuple[str, list[dict]]:
+    """Latest maintainer review body and the unresolved threads an agent should see.
+
+    That is every thread the maintainer participates in, plus every question thread of
+    an agent identity (with status `offen` until the maintainer answered).
+    """
     pull = data["data"]["repository"]["pullRequest"]
-    reviews = [
-        r
-        for r in pull["reviews"]["nodes"]
-        if same_login((r.get("author") or {}).get("login"), owner)
-    ]
+    reviews = [r for r in pull["reviews"]["nodes"] if same_login(_login(r), owner)]
     body = reviews[-1]["body"] if reviews else ""
-    threads = []
-    for thread in pull["reviewThreads"]["nodes"]:
-        comments = thread["comments"]["nodes"]
-        if thread["isResolved"] or not comments:
+    views = (thread_view(t, owner, logins) for t in pull["reviewThreads"]["nodes"])
+    return body, [view for view in views if view is not None]
+
+
+def render_question_threads(threads: list[dict]) -> str:
+    """Context lines for question threads (empty string if there are none)."""
+    parts: list[str] = []
+    for thread in threads:
+        if "question_id" not in thread:
             continue
-        if not any(same_login((c.get("author") or {}).get("login"), owner) for c in comments):
-            continue
-        threads.append(
-            {
-                "reply_to_id": comments[0]["databaseId"],
-                "path": thread["path"],
-                "line": thread["line"],
-                # only show the maintainer's and our own replies, never third parties
-                "conversation": [
-                    {"author": c["author"]["login"], "body": c["body"]}
-                    for c in comments
-                    if same_login(c["author"]["login"], owner)
-                    or (c["author"]["login"] or "").endswith("[bot]")
-                ],
-            }
+        parts.append(
+            f"### Question {thread['question_id']} — {thread['status']} "
+            f"(thread `reply_to_id={thread['reply_to_id']}`, "
+            f"`{thread['path']}:{thread['line']}`)"
         )
-    return body, threads
+        for comment in thread["conversation"]:
+            parts += [f"**{comment['author']}:** {comment['body']}", ""]
+    return "\n".join(parts)
+
+
+def pr_question_context(pr: int, threads: list[dict]) -> list[str]:
+    """Context lines for all agent questions on a PR: threads and PR-level comments."""
+    parts: list[str] = []
+    thread_text = render_question_threads(threads)
+    if thread_text:
+        parts += ["## Questions asked in review threads", "", thread_text, ""]
+    comments = gh_json(f"repos/{repo()}/issues/{pr}/comments?per_page=100", "--paginate")
+    questions, answers, _ = split_issue_comments(comments, maintainer(), agent_logins())
+    if questions:
+        heading = "## Questions asked as PR comments"
+        parts += [render_questions_section(questions, answers, heading), ""]
+    return parts
 
 
 def cmd_human_context(args) -> int:
@@ -527,7 +727,7 @@ def cmd_human_context(args) -> int:
             f"pr={args.pr}",
         )
     )
-    body, threads = human_feedback(data, maintainer())
+    body, threads = human_feedback(data, maintainer(), agent_logins())
     parts = [
         build_issue_context(args.issue),
         "",
@@ -538,15 +738,17 @@ def cmd_human_context(args) -> int:
         "## Open review threads",
         "",
     ]
-    if not threads:
+    plain = [t for t in threads if "question_id" not in t]
+    if not plain:
         parts.append("_(none)_")
-    for thread in threads:
+    for thread in plain:
         parts.append(
             f"### Thread `reply_to_id={thread['reply_to_id']}` — "
             f"`{thread['path']}:{thread['line']}`"
         )
         for comment in thread["conversation"]:
             parts += [f"**{comment['author']}:** {comment['body']}", ""]
+    parts += pr_question_context(args.pr, threads)
     write(args.out, "\n".join(parts))
     return 0
 
@@ -655,6 +857,105 @@ def cmd_post_review(args: argparse.Namespace) -> int:
     return 0
 
 
+def question_entries(result: dict) -> list[dict]:
+    """Well-formed entries of `open_questions` (objects with a non-empty `question`)."""
+    entries = result.get("open_questions") or []
+    return [e for e in entries if isinstance(e, dict) and str(e.get("question") or "").strip()]
+
+
+def cmd_questions_pointer(args: argparse.Namespace) -> int:
+    """Output pointer=<one line> for the plan, blocked or round comment (empty: no questions)."""
+    result = json.loads(Path(args.result).read_text(encoding="utf-8"))
+    set_output("pointer", questions_pointer(len(question_entries(result)), args.phase))
+    return 0
+
+
+def post_json(endpoint: str, payload: dict) -> bool:
+    """POST a JSON payload with gh; False if GitHub rejected it."""
+    result = subprocess.run(
+        ["gh", "api", endpoint, "--input", "-"],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=120,
+    )
+    if result.returncode != 0:
+        sys.stderr.write(result.stderr)
+    return result.returncode == 0
+
+
+def known_question_ids(endpoints: Sequence[str]) -> set[str]:
+    """IDs of the agent questions already posted under the given comment endpoints."""
+    ids: set[str] = set()
+    for endpoint in endpoints:
+        for comment in gh_json(f"{endpoint}?per_page=100", "--paginate"):
+            if is_agent_question(comment, agent_logins()):
+                ids.add(question_id(comment["body"]) or "")
+    ids.discard("")
+    return ids
+
+
+def pr_question_bodies(qid: str, entry: dict, place: dict) -> dict[str, str]:
+    """Bodies of a PR-phase question: as review thread, and as PR comment (the fallback).
+
+    A PR comment loses the anchor on the file, so only that body names the file (and line).
+    """
+    text, context = str(entry["question"]), str(entry.get("context") or "")
+    pr_context = context
+    if place["kind"] != "pr":
+        where = f"Regarding `{entry['path']}`" + (
+            f" line {entry['line']}" if "line" in entry else ""
+        )
+        pr_context = f"{where}\n\n{context}"
+    return {
+        "thread": render_question(qid, text, context, "pr"),
+        "pr": render_question(qid, text, pr_context, "pr"),
+    }
+
+
+def post_pr_question(pr: int, sha: str, bodies: dict[str, str], place: dict) -> None:
+    """Post one question as inline thread, file comment or PR comment, falling back outwards."""
+    base = f"repos/{repo()}"
+    review = {"commit_id": sha, "body": bodies["thread"]}
+    attempts = []
+    if place["kind"] == "inline":
+        inline = {**review, "path": place["path"], "line": place["line"], "side": "RIGHT"}
+        attempts.append((f"{base}/pulls/{pr}/comments", inline))
+    if place["kind"] in ("inline", "file"):
+        file_level = {**review, "path": place["path"], "subject_type": "file"}
+        attempts.append((f"{base}/pulls/{pr}/comments", file_level))
+    attempts.append((f"{base}/issues/{pr}/comments", {"body": bodies["pr"]}))
+    for endpoint, payload in attempts:
+        if post_json(endpoint, payload):
+            return
+
+
+def cmd_post_questions(args: argparse.Namespace) -> int:
+    """Post every open question of an agent result as its own comment or review thread."""
+    result = json.loads(Path(args.result).read_text(encoding="utf-8"))
+    entries = question_entries(result)
+    if args.target == "issue":
+        existing = known_question_ids([f"repos/{repo()}/issues/{args.number}/comments"])
+    else:
+        existing = known_question_ids(
+            [
+                f"repos/{repo()}/issues/{args.number}/comments",
+                f"repos/{repo()}/pulls/{args.number}/comments",
+            ]
+        )
+        allowed = changed_lines(Path(args.diff).read_text(encoding="utf-8"))
+    for qid, entry in zip(next_question_ids(existing, len(entries)), entries, strict=True):
+        if args.target == "issue":
+            text, context = str(entry["question"]), str(entry.get("context") or "")
+            body = render_question(qid, text, context, "issue")
+            gh("api", f"repos/{repo()}/issues/{args.number}/comments", "-f", f"body={body}")
+            continue
+        place = question_placement(entry, allowed)
+        post_pr_question(args.number, args.sha, pr_question_bodies(qid, entry, place), place)
+    return 0
+
+
 def cmd_post_replies(args) -> int:
     """Reply to the maintainer's review threads (never resolves them)."""
     with open(args.result, encoding="utf-8") as handle:
@@ -698,6 +999,22 @@ def add_pr_context_parsers(sub: argparse._SubParsersAction[argparse.ArgumentPars
     p.add_argument("sha")
     p.add_argument("out")
     p.set_defaults(func=cmd_ci_context)
+
+
+def add_question_parsers(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    """Register the commands that post an agent's open questions."""
+    p = sub.add_parser("post-questions")
+    p.add_argument("target", choices=["issue", "pr"])
+    p.add_argument("number", type=int, help="issue or PR number")
+    p.add_argument("result", help="agent structured output (json file)")
+    p.add_argument("--diff", help="unified diff of the PR (target pr)")
+    p.add_argument("--sha", help="head commit of the PR (target pr)")
+    p.set_defaults(func=cmd_post_questions)
+
+    p = sub.add_parser("questions-pointer")
+    p.add_argument("phase", choices=["issue", "pr"])
+    p.add_argument("result", help="agent structured output (json file)")
+    p.set_defaults(func=cmd_questions_pointer)
 
 
 def main() -> int:
@@ -745,6 +1062,8 @@ def main() -> int:
     p.add_argument("diff", help="unified diff of the PR")
     p.add_argument("sha", help="head commit the review refers to")
     p.set_defaults(func=cmd_post_review)
+
+    add_question_parsers(sub)
 
     p = sub.add_parser("post-replies")
     p.add_argument("pr", type=int)

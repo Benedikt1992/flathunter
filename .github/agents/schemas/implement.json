@@ -5,5 +5,5 @@
   "pr_title":{"type":"string"},
   "summary":{"type":"string","description":"What changed and why, markdown"},
   "test_plan":{"type":"string","description":"Which tests prove which acceptance criterion, markdown"},
-  "open_questions":{"type":"array","items":{"type":"string"}},
+  "open_questions":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["question"],"properties":{"question":{"type":"string","description":"Exactly one question, understandable on its own"},"context":{"type":"string","description":"Why you ask, the options and your recommendation"},"path":{"type":"string","description":"Repo-relative file the question is about"},"line":{"type":"integer","description":"Line in the new version of that file"}}}},
   "follow_ups":{"type":"array","items":{"type":"string"}}}}

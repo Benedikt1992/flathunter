@@ -98,6 +98,7 @@ jobs:
           BRANCH: ${{ steps.info.outputs.branch }}
           ISSUE: ${{ steps.info.outputs.issue }}
           SHA: ${{ steps.info.outputs.head_sha }}
+          AGENT_BOT_LOGIN: ${{ steps.bot.outputs.name }}
         run: |
           git fetch -q origin "$BRANCH"
           git checkout -q -B "$BRANCH" "origin/$BRANCH"
@@ -157,6 +158,7 @@ jobs:
           APP_TOKEN: ${{ steps.app.outputs.token }}
           BRANCH: ${{ steps.info.outputs.branch }}
           BASE_SHA: ${{ steps.prep.outputs.base_sha }}
+          AGENT_BOT_LOGIN: ${{ steps.bot.outputs.name }}
         run: |
           [ -n "$OUT" ] || OUT='{}'
           printf '%s' "$OUT" > "$RUNNER_TEMP/result.json"
@@ -168,12 +170,16 @@ jobs:
           if [ "$MODE" = "human" ]; then
             GH_TOKEN="$APP_TOKEN" python3 "$OPS" post-replies "$PR" "$RUNNER_TEMP/result.json"
           fi
+          git diff "origin/${DEFAULT_BRANCH}...HEAD" > "$RUNNER_TEMP/pr.diff"
+          GH_TOKEN="$APP_TOKEN" python3 "$OPS" post-questions pr "$PR" "$RUNNER_TEMP/result.json" \
+            --diff "$RUNNER_TEMP/pr.diff" --sha "$(git rev-parse HEAD)"
+          pointer=$(python3 "$OPS" questions-pointer pr "$RUNNER_TEMP/result.json" | sed -n 's/^pointer=//p')
           {
             echo "<!-- agent-fix-round mode=$MODE -->"
             echo "### 🔧 Fix round (\`$MODE\`) — status \`$status\`, $commits new commit(s)"
             echo
             jq -r '.summary // "_no summary_"' "$RUNNER_TEMP/result.json"
-            jq -r 'if (.open_questions // []) | length > 0 then "\n**Open questions:**\n" + ((.open_questions) | map("- " + .) | join("\n")) else "" end' "$RUNNER_TEMP/result.json"
+            if [ -n "$pointer" ]; then echo; echo "**Open questions:** $pointer"; fi
           } > "$RUNNER_TEMP/round.md"
           GH_TOKEN="$APP_TOKEN" gh pr comment "$PR" --body-file "$RUNNER_TEMP/round.md"
           echo "commits=$commits" >> "$GITHUB_OUTPUT"

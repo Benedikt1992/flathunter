@@ -17,13 +17,22 @@ approve in two minutes:
 1. **Understanding**: one paragraph restating the goal in your own words.
 2. **Acceptance criteria → tests**: for each acceptance criterion, the test(s) that will
    prove it (file and test name, what is asserted). If the issue has no testable
-   acceptance criteria, say so in `open_questions`.
+   acceptance criteria, ask it as a question in `open_questions`.
 3. **Changes**: which files/components change and how, mapped to the components in
    `ARCHITECTURE.md`. Prefer existing extension points.
 4. **Architecture check**: confirm the change stays within the dependency rules, or
    explain why it needs an ADR (`architecture_impact: needs-adr`).
 5. **Risks & security**: input validation, secrets, network calls, error handling.
 6. **Out of scope**: what you will deliberately not touch.
+
+## Questions
+`open_questions` is a list of objects, not strings. Each entry is posted as its own
+conversation that the maintainer answers directly.
+- `question`: exactly one question. It must be understandable without the rest of your
+  output and quick to answer (prefer yes/no or a choice).
+- `context` (optional): why you ask, the options, and which one you recommend.
+- Do not repeat a question that is already answered in the "Rückfragen" section of
+  the context; use the answer. Questions marked `offen` are still unanswered: do not ask them again either.
 
 Set `size` honestly. `too-large` means: should be split. Then propose sub-issues.
 

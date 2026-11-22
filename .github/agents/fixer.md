@@ -28,6 +28,19 @@ permissions or other repositories.
    `Address review: <what> (#<issue>)`. New commits only; never amend, rebase or force-push.
    Do not push; the workflow pushes. Never commit files under `.agent/`.
 
+## Questions
+`open_questions` is a list of objects, not strings. Each entry is posted as its own
+conversation that the maintainer answers directly.
+- `question`: exactly one question. It must be understandable without the rest of your
+  output and quick to answer (prefer yes/no or a choice).
+- `context` (optional): why you ask, the options, and which one you recommend.
+- `path` and `line` (optional): set them when the question is about a specific line of
+  your change (a line in the new version of the file). Without `path` it becomes a PR comment.
+- A question about an existing thread of the maintainer is not an `open_questions` entry:
+  ask it in your `replies` entry for that thread.
+- Do not repeat a question that is already answered in the "Rückfragen" section of
+  the context; use the answer. Questions marked `offen` are still unanswered: do not ask them again either.
+
 ## Result
 - `summary`: what you changed in this round (markdown list).
 - `replies` (maintainer review only): one reply per thread, using the thread's
