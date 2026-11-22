@@ -62,8 +62,6 @@ The plan, blocked and round comments only say how many questions there are.
   answers. Only your answers count; comments of others never reach an agent. Unresolved
   question threads block the merge (conversation resolution), so none gets lost.
 - IDs are unique per issue and per PR, they do not continue from one to the other.
-- Workflow patch note: the agent app cannot push `.github/workflows/`, so the workflow
-  changes of this feature come as a patch in the PR description.
 
 If a PR is fundamentally on the wrong track: close it, sharpen the issue (acceptance
 criteria, non-goals, hints on the approach), and restart with `agent:plan`.
