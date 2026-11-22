@@ -890,6 +890,24 @@ def known_question_ids(endpoints: Sequence[str]) -> set[str]:
     return ids
 
 
+def pr_question_bodies(qid: str, entry: dict, place: dict) -> dict[str, str]:
+    """Bodies of a PR-phase question: as review thread, and as PR comment (the fallback).
+
+    A PR comment loses the anchor on the file, so only that body names the file (and line).
+    """
+    text, context = str(entry["question"]), str(entry.get("context") or "")
+    pr_context = context
+    if place["kind"] != "pr":
+        where = f"Regarding `{entry['path']}`" + (
+            f" line {entry['line']}" if "line" in entry else ""
+        )
+        pr_context = f"{where}\n\n{context}"
+    return {
+        "thread": render_question(qid, text, context, "pr"),
+        "pr": render_question(qid, text, pr_context, "pr"),
+    }
+
+
 def post_pr_question(pr: int, sha: str, bodies: dict[str, str], place: dict) -> None:
     """Post one question as inline thread, file comment or PR comment, falling back outwards."""
     base = f"repos/{repo()}"
@@ -922,23 +940,13 @@ def cmd_post_questions(args: argparse.Namespace) -> int:
         )
         allowed = changed_lines(Path(args.diff).read_text(encoding="utf-8"))
     for qid, entry in zip(next_question_ids(existing, len(entries)), entries, strict=True):
-        text, context = str(entry["question"]), str(entry.get("context") or "")
         if args.target == "issue":
+            text, context = str(entry["question"]), str(entry.get("context") or "")
             body = render_question(qid, text, context, "issue")
             gh("api", f"repos/{repo()}/issues/{args.number}/comments", "-f", f"body={body}")
             continue
         place = question_placement(entry, allowed)
-        where = f"Regarding `{entry['path']}`" + (
-            f" line {entry['line']}" if "line" in entry else ""
-        )
-        pr_context = (
-            f"{where}\n\n{context}" if place["kind"] != "pr" or entry.get("path") else context
-        )
-        bodies = {
-            "thread": render_question(qid, text, context, "pr"),
-            "pr": render_question(qid, text, pr_context, "pr"),
-        }
-        post_pr_question(args.number, args.sha, bodies, place)
+        post_pr_question(args.number, args.sha, pr_question_bodies(qid, entry, place), place)
     return 0
 
 

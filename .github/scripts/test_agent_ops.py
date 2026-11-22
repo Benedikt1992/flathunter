@@ -598,6 +598,63 @@ def test_post_questions_issue_one_comment_each(monkeypatch, tmp_path):
     assert "why" in bodies[1]
 
 
+PR_DIFF = """diff --git a/a.py b/a.py
+--- a/a.py
++++ b/a.py
+@@ -1,1 +1,2 @@
+ x = 1
++y = 2
+"""
+
+
+def test_post_questions_pr_places_each_question(monkeypatch, tmp_path):
+    monkeypatch.setenv("GITHUB_REPOSITORY", "o/r")
+    monkeypatch.setenv("MAINTAINER", "owner")
+    monkeypatch.setattr(ops, "gh_json", lambda *_a, **_k: [])
+    posted = []
+    monkeypatch.setattr(ops, "post_json", lambda e, p: posted.append((e, p)) or True)
+    result = tmp_path / "r.json"
+    result.write_text(
+        '{"open_questions": [{"question": "General?", "context": "why"},'
+        ' {"question": "Inline?", "path": "a.py", "line": 2},'
+        ' {"question": "File?", "path": "b.py"}]}'
+    )
+    diff = tmp_path / "pr.diff"
+    diff.write_text(PR_DIFF)
+    args = ops.argparse.Namespace(
+        target="pr", number=5, result=str(result), diff=str(diff), sha="abc"
+    )
+    assert ops.cmd_post_questions(args) == 0
+    endpoints = [e for e, _ in posted]
+    assert endpoints == [
+        "repos/o/r/issues/5/comments",
+        "repos/o/r/pulls/5/comments",
+        "repos/o/r/pulls/5/comments",
+    ]
+    general, inline, file_level = (p for _, p in posted)
+    assert ops.question_id(general["body"]) == "Q1"
+    assert "General?" in general["body"]
+    assert "Regarding" not in general["body"]
+    assert (inline["path"], inline["line"], ops.question_id(inline["body"])) == ("a.py", 2, "Q2")
+    assert (file_level["path"], file_level["subject_type"]) == ("b.py", "file")
+    assert ops.question_id(file_level["body"]) == "Q3"
+
+
+def test_pr_question_bodies_name_the_file_only_in_the_pr_fallback():
+    entry = {"question": "Rename?", "context": "ctx", "path": "a.py", "line": 2}
+    place = {"kind": "inline", "path": "a.py", "line": 2}
+    bodies = ops.pr_question_bodies("Q4", entry, place)
+    assert "Regarding `a.py` line 2" in bodies["pr"]
+    assert "Regarding" not in bodies["thread"]
+    assert all(ops.question_id(b) == "Q4" for b in bodies.values())
+    assert all("Rename?" in b and "ctx" in b for b in bodies.values())
+    file_only = ops.pr_question_bodies("Q5", {"question": "?", "path": "b.py"}, {"kind": "file"})
+    assert "> Regarding `b.py`\n" in file_only["pr"]
+    assert "Regarding `b.py` line" not in file_only["pr"]
+    general = ops.pr_question_bodies("Q6", {"question": "?"}, {"kind": "pr"})
+    assert general["pr"] == general["thread"]
+
+
 def test_questions_pointer_command_counts_valid_entries(tmp_path, capsys):
     result = tmp_path / "r.json"
     result.write_text('{"open_questions": [{"question": "A?"}, {"question": ""}]}')
