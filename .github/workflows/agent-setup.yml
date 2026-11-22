@@ -28,7 +28,6 @@ jobs:
           agent:blocked|d93f0b|Agent needs answers from the maintainer
           agent:stuck|b60205|Agent workflow failed or ran out of rounds
           needs-human|5319e7|Ready for the maintainer's review
-          allow-protected-change|e99695|Maintainer: allow changes to protected files in this PR
-          allow-suppression|e99695|Maintainer: allow lint/type/test suppressions in this PR
+          allow-suppression|e99695|Maintainer: allow suppressions or a grown baseline in this PR
           allow-test-removal|e99695|Maintainer: allow removing tests in this PR
           EOF

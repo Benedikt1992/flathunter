@@ -3,7 +3,7 @@
 *                     @Benedikt1992
 
 # Quality gates, agent rules and dependencies (listed explicitly for visibility;
-# additionally enforced by .github/scripts/agent_guard.py)
+# additionally reported by .github/scripts/agent_guard.py and checked by the agent reviewer)
 /.github/             @Benedikt1992
 /CLAUDE.md            @Benedikt1992
 /ARCHITECTURE.md      @Benedikt1992

@@ -54,8 +54,10 @@ but legacy code is grandfathered: existing violations are frozen in baselines
    Do not add suppressions: `# noqa`, `# ruff: noqa`, `# type: ignore`,
    `# pyrefly: ignore`, `# pylint: disable`, `# nosec`, `# fmt: off/skip`,
    `pragma: no cover`, `pragma: no mutate`, `pytest.mark.skip`/`xfail`; and do not
-   delete or loosen existing tests. CI (`agent_guard.py`) rejects these unless the
-   maintainer explicitly allows them.
+   delete or loosen existing tests. CI (`agent_guard.py`) rejects suppressions, grown
+   baselines and removed tests unless the maintainer explicitly allows them. Change a
+   protected file only when the issue (or roadmap rule 12) requires it and say why in
+   the PR: the reviewer checks each one against the issue.
 5. **Dependencies:** do not add or upgrade packages (`Pipfile`, `Pipfile.lock`,
    `setup.py`, `requirements-*.txt`) unless the issue explicitly asks for it.
 6. **Security:** no secrets in code, tests or logs; validate external input
@@ -109,12 +111,12 @@ Bei Widerspruch gilt die strengere Regel.
     ihren Limits. Bei einer Sperre wird nicht eskaliert, sondern pausiert und gemeldet.
 11. **Abhängigkeiten** nur, wenn das Issue sie vorsieht und sie auf `linux/arm64` ohne
     Kompilieren installierbar sind; jede neue Abhängigkeit im PR begründen. `Pipfile`,
-    `Pipfile.lock` und `requirements-*.txt` sind geschützt: Der Maintainer gibt die
-    Änderung mit dem Label `allow-protected-change` frei.
+    `Pipfile.lock` und `requirements-*.txt` sind geschützt: Der unabhängige Reviewer
+    prüft, ob das Issue die Änderung vorsieht; der Maintainer entscheidet mit dem Merge.
 12. **Dokumentation** im selben PR nachziehen (`docs/`, `config.yaml.dist`). Neue
     Komponenten oder Abhängigkeitsregeln gehören nach `ARCHITECTURE.md` und `.importlinter`;
     diese Dateien sind wie `CLAUDE.md` geschützt. Die Änderung wird im PR vorgenommen und
-    begründet, der Maintainer gibt sie mit `allow-protected-change` frei.
+    begründet; der Reviewer prüft sie gegen das Issue, der Maintainer entscheidet mit dem Merge.
 13. **Bei echten Unklarheiten** oder einer Entscheidung, die über das Issue hinausgeht:
     Frage stellen (der Workflow kommentiert sie als `open_questions` im Issue) und stoppen,
     statt zu raten.
