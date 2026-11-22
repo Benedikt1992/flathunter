@@ -1,5 +1,6 @@
-# Agent guard: rejects PRs that weaken quality gates (protected files, suppressions,
-# removed tests) unless the maintainer added the matching `allow-*` label.
+# Agent guard: rejects PRs that weaken quality gates (suppressions, grown baselines,
+# removed tests) unless the maintainer added the matching `allow-*` label. Changed
+# protected files are only reported; the independent reviewer checks them (ADR 0003).
 # Re-runs when labels change so an override takes effect immediately.
 name: Guard
 

@@ -1,10 +1,6 @@
 {
-  ".github/scripts/agent_guard.py::C901::`find_violations` is too complex (13 > 10)": 1,
-  ".github/scripts/agent_guard.py::PERF401::Use `list.extend` to create a transformed list": 4,
   ".github/scripts/agent_guard.py::PIE810::Call `startswith` once with a `tuple`": 1,
-  ".github/scripts/agent_guard.py::PLR0912::Too many branches (13 > 12)": 1,
   ".github/scripts/agent_guard.py::PTH119::`os.path.basename()` should be replaced by `Path.name`": 1,
-  ".github/scripts/agent_guard.py::PTH123::`open()` should be replaced by `Path.open()`": 1,
   ".github/scripts/agent_guard.py::S310::Audit URL open for permitted schemes. Allowing use of `file:` or custom schemes is often unexpected.": 2,
   ".github/scripts/agent_ops.py::ANN001::Missing type annotation for function argument `args`": 11,
   ".github/scripts/agent_ops.py::ANN201::Missing return type annotation for public function `gh_json`": 1,
