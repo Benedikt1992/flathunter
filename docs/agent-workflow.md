@@ -198,5 +198,11 @@ via repository variables.
   setup merged into the default branch? Check the Actions tab.
 - **`agent:stuck`**: open the linked run log. Typical causes: missing secrets, model
   limits, round limit reached (then the issue usually needs clarification).
+- **`Workflow initiated by non-human actor: github-actions (type: Bot). Add bot to
+  allowed_bots list`**: the workflows start each other with `gh workflow run` and the
+  `GITHUB_TOKEN`, so the actor is `github-actions[bot]`, and `claude-code-action` aborts
+  for bot actors that are not allowed. Every `claude-code-action` step in the dispatchable
+  `agent-*.yml` workflows must set `allowed_bots: github-actions` (never `'*'`, which
+  would allow every GitHub App). `.github/scripts/test_workflow_allowed_bots.py` checks this.
 - **Reviewer keeps requesting the same thing**: the acceptance criteria are probably
   ambiguous; clarify the issue or decide yourself in a review.
