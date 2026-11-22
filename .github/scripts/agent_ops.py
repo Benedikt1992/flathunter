@@ -656,13 +656,11 @@ def thread_view(thread: dict, owner: str, logins: Sequence[str]) -> dict | None:
         "line": thread["line"],
     }
     if is_question:
-        keep = [c for c in comments if same_login(_login(c), owner) or is_agent(c, logins)]
         answered = any(same_login(_login(c), owner) for c in comments)
         view["question_id"] = qid
         view["status"] = STATUS_ANSWERED if answered else STATUS_OPEN
-    else:
-        # only show the maintainer's and our own replies, never third parties
-        keep = [c for c in comments if same_login(_login(c), owner) or _login(c).endswith("[bot]")]
+    # only the maintainer's and the agents' own comments, never third parties or other bots
+    keep = [c for c in comments if same_login(_login(c), owner) or is_agent(c, logins)]
     view["conversation"] = [{"author": _login(c), "body": c["body"]} for c in keep]
     return view
 

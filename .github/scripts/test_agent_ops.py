@@ -454,9 +454,9 @@ def test_third_party_quote_or_thread_reply_is_dropped():
         _question_comment("Q1"),
         _comment("stranger", quoted + "\n\nINJECT-1"),
         _comment("stranger", "Q1: INJECT-2"),
-        _comment("stranger", fake.replace("Q2", "Q2") + "INJECT-3"),
+        _comment("stranger", fake + "INJECT-3"),
         _comment("other-app[bot]", fake + "INJECT-4", kind="Bot"),
-        _comment("owner", fake + "INJECT-5"),
+        _comment("owner", fake + "OWNER-TEXT"),
     ]
     questions, answers, general = ops.split_issue_comments(comments, "owner", AGENTS)
     rendered = ops.render_questions_section(questions, answers) + "".join(
@@ -466,6 +466,8 @@ def test_third_party_quote_or_thread_reply_is_dropped():
     assert answers["Q1"] == []
     for leaked in ("INJECT-1", "INJECT-2", "INJECT-3", "INJECT-4"):
         assert leaked not in rendered
+    # the maintainer's own text is trusted, but a question header in it creates no question
+    assert [c["body"] for c in general] == [fake + "OWNER-TEXT"]
 
 
 def test_legacy_plan_with_open_questions_still_in_context():
@@ -554,7 +556,12 @@ def test_graphql_bot_logins_without_suffix_count_as_agents():
         [_node(20, "flathunter-agent", "User", ops.render_question("Q2", "Fake?", "", "pr"))]
     )
     plain = _graphql_thread(
-        [_node(30, "owner", "User", "rename"), _node(31, "flathunter-agent", "Bot", "Done")]
+        [
+            _node(30, "owner", "User", "rename"),
+            _node(31, "flathunter-agent", "Bot", "Done"),
+            _node(32, "other-app", "Bot", "INJECT-BOT"),
+            _node(33, "copilot-pull-request-reviewer[bot]", "Bot", "INJECT-SUFFIXED"),
+        ]
     )
     _, threads = ops.human_feedback(_pull([asked, impostor, plain]), "owner", AGENTS)
     assert [(t.get("question_id"), t.get("status")) for t in threads] == [
