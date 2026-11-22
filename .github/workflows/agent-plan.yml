@@ -63,14 +63,18 @@ jobs:
           OUT: ${{ steps.claude.outputs.structured_output }}
         run: |
           if [ -z "$OUT" ]; then echo "Planner produced no result"; exit 1; fi
-          printf '%s' "$OUT" | jq -r --arg m "$MAINTAINER" '
+          printf '%s' "$OUT" > "$RUNNER_TEMP/plan.json"
+          OPS=.github/scripts/agent_ops.py
+          pointer=$(python3 "$OPS" questions-pointer issue "$RUNNER_TEMP/plan.json" | sed -n 's/^pointer=//p')
+          jq -r --arg m "$MAINTAINER" --arg q "$pointer" '
             "<!-- agent-plan -->\n## 🤖 Implementation plan\n\n" +
             "**Size:** \(.size) · **Architecture impact:** \(.architecture_impact)\n\n" +
             .plan_markdown + "\n\n" +
-            (if (.open_questions | length) > 0 then "### Open questions\n\n" + (.open_questions | map("- " + .) | join("\n")) + "\n\n" else "" end) +
+            (if $q != "" then "### Open questions\n\n" + $q + "\n\n" else "" end) +
             "---\n@\($m): add `agent:ready` to implement this plan, or comment with corrections and re-add `agent:plan`."
-          ' > "$RUNNER_TEMP/plan.md"
+          ' "$RUNNER_TEMP/plan.json" > "$RUNNER_TEMP/plan.md"
           gh issue comment "$ISSUE" --body-file "$RUNNER_TEMP/plan.md"
+          python3 "$OPS" post-questions issue "$ISSUE" "$RUNNER_TEMP/plan.json"
           gh issue edit "$ISSUE" --remove-label agent:plan --add-label agent:plan-ready || true
 
       - name: Report failure
