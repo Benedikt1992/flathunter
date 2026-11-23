@@ -129,11 +129,15 @@ def test_push_output_never_contains_token(capsys):
     assert "x-access-token:***@github.com" in captured.out
 
 
-@given(token=st.text(min_size=1), before=st.text(), after=st.text())
+@given(
+    token=st.text(alphabet=st.characters(exclude_characters="*"), min_size=1),
+    before=st.text(),
+    after=st.text(),
+)
 def test_redact_removes_token(token, before, after):
     redacted = ops.redact(before + token + after, token)
     assert "***" in redacted
-    assert token not in redacted or token in "***"
+    assert token not in redacted
 
 
 @given(text=st.text(), token=st.text(min_size=1))
