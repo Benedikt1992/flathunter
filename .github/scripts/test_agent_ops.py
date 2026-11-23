@@ -785,6 +785,45 @@ def test_questions_pointer_command_counts_valid_entries(tmp_path, capsys):
     assert "pointer=1 question, one review thread each" in capsys.readouterr().out
 
 
+def test_blocked_footer_with_questions_points_to_question_comments():
+    for count in (1, 3):
+        footer = ops.blocked_footer(count, "https://x/run/1")
+        assert "Quote reply" in footer
+        assert "`Qn:`" in footer
+        assert "`agent:ready`" in footer
+        assert "[Run log](https://x/run/1)" in footer
+        assert "Answer in a comment" not in footer
+        assert "\n" not in footer
+
+
+def test_blocked_footer_without_questions_has_no_answer_hint():
+    footer = ops.blocked_footer(0, "https://x/run/1")
+    assert footer == "Re-add `agent:ready` to retry. [Run log](https://x/run/1)"
+    for word in ("Answer", "answer", "Quote reply", "Qn:"):
+        assert word not in footer
+    assert ops.blocked_footer(-1, "u") == ops.blocked_footer(0, "u")
+
+
+@given(st.integers(min_value=1, max_value=50))
+def test_blocked_footer_property(count):
+    footer = ops.blocked_footer(count, "https://x/run/1")
+    assert "Answer in a comment" not in footer
+    assert "`agent:ready`" in footer
+    assert "\n" not in footer
+
+
+def test_blocked_footer_command_uses_valid_entries(tmp_path, capsys):
+    result = tmp_path / "r.json"
+    url = "https://x/run/1"
+    args = ops.argparse.Namespace(result=str(result), run_url=url)
+    result.write_text('{"open_questions": [{"question": "A?"}, {"question": ""}]}')
+    assert ops.cmd_blocked_footer(args) == 0
+    assert capsys.readouterr().out == "footer=" + ops.blocked_footer(1, url) + "\n"
+    result.write_text("{}")
+    assert ops.cmd_blocked_footer(args) == 0
+    assert capsys.readouterr().out == "footer=" + ops.blocked_footer(0, url) + "\n"
+
+
 RUN_URL = "https://github.com/o/r/actions/runs/7"
 
 

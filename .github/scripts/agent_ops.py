@@ -305,6 +305,17 @@ def questions_pointer(count: int, phase: str) -> str:
     return f"{count} {noun}, {where}."
 
 
+def blocked_footer(count: int, run_url: str) -> str:
+    """Closing line of the implementer's blocked comment, depending on open questions."""
+    link = f"[Run log]({run_url})"
+    if count <= 0:
+        return f"Re-add `agent:ready` to retry. {link}"
+    return (
+        "Answer each question in its own comment below (**Quote reply** or start with `Qn:`), "
+        f"then re-add `agent:ready` to retry. {link}"
+    )
+
+
 def answer_ids(body: str | None, known: set[str]) -> set[str]:
     """Known question IDs a comment answers: quoted headers plus a leading `Qn:`."""
     text = (body or "").replace("\r\n", "\n")
@@ -1246,6 +1257,13 @@ def cmd_questions_pointer(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_blocked_footer(args: argparse.Namespace) -> int:
+    """Output footer=<one line> for the implementer's blocked comment."""
+    result = json.loads(Path(args.result).read_text(encoding="utf-8"))
+    set_output("footer", blocked_footer(len(question_entries(result)), args.run_url))
+    return 0
+
+
 def cmd_fix_round(args: argparse.Namespace) -> int:
     """Write the round comment to --out; output action=<rereview|stuck|maintainer> and failed=."""
     try:
@@ -1409,6 +1427,11 @@ def add_question_parsers(sub: argparse._SubParsersAction[argparse.ArgumentParser
     p.add_argument("phase", choices=["issue", "pr"])
     p.add_argument("result", help="agent structured output (json file)")
     p.set_defaults(func=cmd_questions_pointer)
+
+    p = sub.add_parser("blocked-footer")
+    p.add_argument("result", help="agent structured output (json file)")
+    p.add_argument("run_url")
+    p.set_defaults(func=cmd_blocked_footer)
 
     p = sub.add_parser("fix-round")
     p.add_argument("--mode", required=True)
