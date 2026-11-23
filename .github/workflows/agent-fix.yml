@@ -167,6 +167,7 @@ jobs:
           commits=$(git rev-list --count "$BASE_SHA"..HEAD)
           if [ "$commits" -gt 0 ]; then
             python3 "$OPS" push-branch "$BRANCH"
+            echo "pushed=true" >> "$GITHUB_OUTPUT"
           fi
           if [ "$MODE" = "human" ]; then
             GH_TOKEN="$APP_TOKEN" python3 "$OPS" post-replies "$PR" "$RUNNER_TEMP/result.json"
@@ -198,11 +199,13 @@ jobs:
         run: gh pr edit "$PR" --add-label agent:stuck --remove-label agent:in-progress || true
 
       - name: Save unpushed work
-        if: failure() && steps.push.outcome == 'failure'
+        # only if the push itself did not happen, not when a later command of the step failed
+        if: failure() && steps.push.outcome == 'failure' && steps.push.outputs.pushed != 'true'
         id: save
         env:
           BASE_SHA: ${{ steps.prep.outputs.base_sha }}
         run: |
+          [ "$(git rev-list --count "$BASE_SHA"..HEAD)" -gt 0 ] || exit 0  # nothing to save
           mkdir -p "$RUNNER_TEMP/agent-work"
           git bundle create "$RUNNER_TEMP/agent-work/work.bundle" "$BASE_SHA"..HEAD
           cp "$RUNNER_TEMP/result.json" "$RUNNER_TEMP/agent-work/result.json"
