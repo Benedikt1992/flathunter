@@ -1,5 +1,8 @@
 """Tests for the pure policy logic in agent_ops (run with `python -m pytest .github/scripts`)."""
 
+import json
+from argparse import Namespace
+
 import agent_ops as ops
 import pytest
 from hypothesis import given
@@ -662,6 +665,62 @@ def test_unresolved_thread_views_keep_reply_to_id():
     rendered = ops.render_question_threads(threads)
     assert "reply_to_id=10" in rendered
     assert "do not reply" not in rendered
+
+
+def test_thread_location_with_and_without_line():
+    assert ops.thread_location("a.py", 3) == "a.py:3"
+    assert ops.thread_location("a.py", None) == "a.py"
+    assert ops.thread_location("a.py", 0) == "a.py:0"
+
+
+def test_thread_location_property():
+    @given(st.text().filter(lambda p: "None" not in p), st.none() | st.integers(min_value=1))
+    def check(path, line):
+        result = ops.thread_location(path, line)
+        assert "None" not in result
+        if line is None:
+            assert result == path
+        else:
+            assert result == f"{path}:{line}"
+            assert result.endswith(f":{line}")
+
+    check()
+
+
+def test_render_question_threads_location_without_line():
+    question = ops.render_question("Q1", "Which?", "", "pr")
+    data = _pull(
+        [
+            _thread([("github-actions[bot]", question)], line=None),
+            _thread([("github-actions[bot]", ops.render_question("Q2", "Other?", "", "pr"))]),
+        ]
+    )
+    _, threads = ops.human_feedback(data, "owner", AGENTS)
+    rendered = ops.render_question_threads(threads)
+    assert "`a.py`)" in rendered
+    assert "`a.py:3`)" in rendered
+    assert "None" not in rendered
+
+
+def test_human_context_location_without_line(monkeypatch, tmp_path):
+    data = _pull(
+        [
+            _thread([("owner", "whole file")], line=None),
+            _thread([("owner", "one line")]),
+        ]
+    )
+    monkeypatch.setattr(ops, "gh", lambda *_a, **_k: json.dumps(data))
+    monkeypatch.setattr(ops, "gh_json", lambda *_a, **_k: [])
+    monkeypatch.setattr(ops, "maintainer", lambda: "owner")
+    monkeypatch.setattr(ops, "agent_logins", lambda: AGENTS)
+    monkeypatch.setattr(ops, "build_issue_context", lambda _issue: "")
+    monkeypatch.setattr(ops, "repo", lambda: "o/r")
+    out = tmp_path / "c.md"
+    ops.cmd_human_context(Namespace(pr=1, issue=2, out=str(out)))
+    text = out.read_text()
+    assert "— `a.py`" in text
+    assert "— `a.py:3`" in text
+    assert "None" not in text
 
 
 def test_post_pr_question_falls_back_outwards(monkeypatch):
