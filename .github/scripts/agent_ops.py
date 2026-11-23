@@ -23,6 +23,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -414,13 +415,65 @@ def changed_lines(diff_text: str) -> dict[str, set[int]]:
     return result
 
 
+def fix_marker(mode: str, *, uncounted: bool = False) -> str:
+    """First line of a fix-round comment; `failed` marks a round that must not be counted."""
+    return f"{FIX_MARKER} mode={mode}{' failed' if uncounted else ''} -->"
+
+
+def fix_round_decision(outcome: str, result: dict, commits: int) -> tuple[bool, str]:
+    """Decide what follows a fixer run.
+
+    Args:
+        outcome: Outcome of the Claude step (`success`, `failure`, ...).
+        result: Structured result of the session (`{}` if there was none).
+        commits: Number of new commits the session produced.
+
+    Returns:
+        `(failed, action)`. A run failed if the step failed or returned no status. The action
+        is `rereview` with new commits, else `stuck` for a failed run, else `maintainer`.
+    """
+    failed = outcome == "failure" or not result.get("status")
+    if commits > 0:
+        return failed, "rereview"
+    return failed, "stuck" if failed else "maintainer"
+
+
+@dataclass(frozen=True)
+class FixRun:
+    """Facts about one fixer run that go into its round comment."""
+
+    mode: str
+    status: str
+    commits: int
+    failed: bool
+    run_url: str
+
+
+def render_fix_round(run: FixRun, summary: str | None, pointer: str) -> str:
+    """Body of the fix-round comment. A failed run without commits is not counted as a round."""
+    lines = [
+        fix_marker(run.mode, uncounted=run.failed and run.commits == 0),
+        f"### 🔧 Fix round (`{run.mode}`) — status `{run.status}`, {run.commits} new commit(s)",
+        "",
+    ]
+    if run.failed:
+        lines += [f"⚠️ The fix session failed. [Run log]({run.run_url})", ""]
+        if run.commits:
+            lines += ["The partial work was pushed and is being re-reviewed.", ""]
+    lines.append(summary or "_no summary_")
+    if pointer:
+        lines += ["", f"**Open questions:** {pointer}"]
+    return "\n".join(lines)
+
+
 def count_fix_rounds(comments: list[dict]) -> int:
-    """Automatic fix rounds already used on a PR (human-triggered rounds are not counted)."""
-    return sum(
-        1
-        for c in comments
-        if (c.get("body") or "").startswith(FIX_MARKER) and "mode=human" not in c["body"]
-    )
+    """Automatic fix rounds already used on a PR (human and failed rounds are not counted)."""
+    count = 0
+    for comment in comments:
+        first = (comment.get("body") or "").split("\n", 1)[0]
+        if first.startswith(FIX_MARKER) and "mode=human" not in first and " failed " not in first:
+            count += 1
+    return count
 
 
 BLOCKER_LINE = re.compile(
@@ -870,6 +923,24 @@ def cmd_questions_pointer(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_fix_round(args: argparse.Namespace) -> int:
+    """Write the round comment to --out; output action=<rereview|stuck|maintainer> and failed=."""
+    try:
+        result = json.loads(Path(args.result).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        result = {}
+    if not isinstance(result, dict):
+        result = {}
+    failed, action = fix_round_decision(args.outcome, result, args.commits)
+    run = FixRun(args.mode, result.get("status") or "failed", args.commits, failed, args.run_url)
+    summary = result.get("summary")
+    body = render_fix_round(run, summary if isinstance(summary, str) else None, args.pointer)
+    write(args.out, body)
+    set_output("action", action)
+    set_output("failed", str(failed).lower())
+    return 0
+
+
 def post_json(endpoint: str, payload: dict) -> bool:
     """POST a JSON payload with gh; False if GitHub rejected it."""
     result = subprocess.run(
@@ -1015,6 +1086,16 @@ def add_question_parsers(sub: argparse._SubParsersAction[argparse.ArgumentParser
     p.add_argument("phase", choices=["issue", "pr"])
     p.add_argument("result", help="agent structured output (json file)")
     p.set_defaults(func=cmd_questions_pointer)
+
+    p = sub.add_parser("fix-round")
+    p.add_argument("--mode", required=True)
+    p.add_argument("--outcome", required=True, help="outcome of the Claude step")
+    p.add_argument("--commits", type=int, required=True)
+    p.add_argument("--result", required=True, help="fixer structured output (json file)")
+    p.add_argument("--pointer", default="")
+    p.add_argument("--run-url", required=True)
+    p.add_argument("--out", required=True)
+    p.set_defaults(func=cmd_fix_round)
 
 
 def main() -> int:
