@@ -30,7 +30,7 @@ from typing import TYPE_CHECKING
 import agent_guard as guard
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Callable, Sequence
 
 PLAN_MARKER = "<!-- agent-plan -->"
 FIX_MARKER = "<!-- agent-fix-round"
@@ -123,6 +123,116 @@ def set_output(name: str, value: str) -> None:
             else:
                 handle.write(f"{name}={value}\n")
     print(f"{name}={value}")
+
+
+# --------------------------------------------------------------------------- push
+
+PUSH_DELAYS = (5, 15, 45)
+GIT_TIMEOUT = 120
+NON_FAST_FORWARD_HINTS = ("non-fast-forward", "fetch first", "[rejected]")
+DEFAULT_COMMITTER_EMAIL = "agent@users.noreply.github.com"
+
+
+def redact(text: str, token: str) -> str:
+    """Replace every occurrence of the secret `token` in `text` with `***`."""
+    return text.replace(token, "***") if token else text
+
+
+def _git(*args: str, cwd: str | None = None) -> subprocess.CompletedProcess[str]:
+    """Run git with a timeout; a timeout counts as a failed run."""
+    try:
+        return subprocess.run(
+            ["git", *args],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=GIT_TIMEOUT,
+            cwd=cwd,
+        )
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(["git", *args], 124, "", "git timed out")
+
+
+def _is_non_fast_forward(stderr: str) -> bool:
+    """True if git's push error says the remote branch has commits we do not have."""
+    return any(hint in stderr for hint in NON_FAST_FORWARD_HINTS)
+
+
+def _ensure_identity(run: Callable[..., subprocess.CompletedProcess[str]]) -> None:
+    """Give the repository a committer identity (needed for the merge commit) if it has none."""
+    if run("config", "user.email").stdout.strip():
+        return
+    run("config", "user.name", os.environ.get("AGENT_BOT_LOGIN") or "agent")
+    run("config", "user.email", DEFAULT_COMMITTER_EMAIL)
+
+
+def sync_with_remote(
+    branch: str, url: str, run: Callable[..., subprocess.CompletedProcess[str]] | None = None
+) -> bool:
+    """Fetch the remote branch and merge it (never rebase). False if that failed.
+
+    A merge conflict is aborted, so the working tree and HEAD stay as they were.
+    """
+    run = run or _git
+    if run("fetch", url, f"refs/heads/{branch}").returncode != 0:
+        return False
+    _ensure_identity(run)
+    if run("merge", "--no-edit", "FETCH_HEAD").returncode == 0:
+        return True
+    run("merge", "--abort")
+    return False
+
+
+def _report_failure(
+    attempt: int, total: int, result: subprocess.CompletedProcess[str], token: str
+) -> None:
+    """Log what a failed push attempt said (token redacted)."""
+    detail = redact(f"{result.stderr or ''}{result.stdout or ''}".strip(), token)
+    print(f"push attempt {attempt}/{total} failed: {detail}")
+
+
+def push_branch(
+    branch: str,
+    url: str,
+    *,
+    token: str = "",
+    run: Callable[..., subprocess.CompletedProcess[str]] | None = None,
+    sleep: Callable[[float], None] | None = None,
+    delays: Sequence[int] = PUSH_DELAYS,
+) -> bool:
+    """Push HEAD to `branch`, retrying with growing waits. Never forces and never rebases.
+
+    If the remote branch moved, it is fetched and merged before the next attempt; a merge
+    conflict is aborted and counts as a failed push.
+
+    Args:
+        branch: Branch name on the remote.
+        url: Remote URL (may contain the token).
+        token: Secret to remove from everything that is printed.
+        run: Git runner (replaceable in tests).
+        sleep: Wait function (replaceable in tests).
+        delays: Waits between attempts; there are `len(delays) + 1` attempts.
+
+    Returns:
+        True if the push succeeded.
+    """
+    run = run or _git
+    sleep = sleep or time.sleep
+    total = len(delays) + 1
+    for attempt in range(1, total + 1):
+        result = run("push", url, f"HEAD:refs/heads/{branch}")
+        if result.returncode == 0:
+            return True
+        _report_failure(attempt, total, result, token)
+        if attempt == total:
+            break
+        if _is_non_fast_forward(result.stderr or ""):
+            if not sync_with_remote(branch, url, run):
+                print("remote branch moved and could not be merged; giving up")
+                return False
+        else:
+            sleep(delays[attempt - 1])
+    return False
 
 
 # --------------------------------------------------------------------------- pure logic
@@ -517,6 +627,13 @@ def select_startable(
 
 
 # --------------------------------------------------------------------------- commands
+
+
+def cmd_push_branch(args: argparse.Namespace) -> int:
+    """Push HEAD to the branch with retries; the token comes from APP_TOKEN, not argv."""
+    token = os.environ.get("APP_TOKEN", "")
+    url = args.remote or f"https://x-access-token:{token}@github.com/{repo()}.git"
+    return 0 if push_branch(args.branch, url, token=token) else 1
 
 
 def cmd_verify_label(args) -> int:
@@ -1134,6 +1251,11 @@ def main() -> int:
     p.set_defaults(func=cmd_wait_checks)
 
     add_pr_context_parsers(sub)
+
+    p = sub.add_parser("push-branch")
+    p.add_argument("branch")
+    p.add_argument("--remote", help="remote URL (default: GitHub, authenticated with APP_TOKEN)")
+    p.set_defaults(func=cmd_push_branch)
 
     p = sub.add_parser("count-rounds")
     p.add_argument("pr", type=int)
