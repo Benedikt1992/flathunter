@@ -214,5 +214,21 @@ via repository variables. Failed fixer runs without commits do not use up `AGENT
   `<!-- agent-fix-round mode=… failed -->`). A failed run that produced commits still counts,
   so a repeating loop is stopped. To restart: fix the cause, then request changes in a
   review or re-dispatch `agent-fix.yml`.
+- **Push failed / work saved as artifact**: both workflows push with
+  `python3 .github/scripts/agent_ops.py push-branch <branch>` (at most 4 attempts, waits of 5, 15
+  and 45 s; if the remote branch moved it is fetched and merged with `git merge --no-edit`,
+  never force-pushed or rebased; a merge conflict is aborted and counts as failed). If the
+  push still fails, the job uploads the artifact `agent-work-<issue|pr>-<run id>` (kept 14
+  days) with `work.bundle` (the new commits) and `result.json` (title, summary, test plan),
+  and the failure comment names it. To take the work over by hand:
+  ```bash
+  gh run download <run id> -n agent-work-<issue|pr>-<run id> -D agent-work
+  git fetch agent-work/work.bundle HEAD:agent/issue-<N>   # fixer: git pull agent-work/work.bundle HEAD on the PR branch
+  git push origin agent/issue-<N>
+  ```
+  For an implementation run, open the PR yourself (title, summary and test plan are in
+  `result.json`), then add `agent:in-progress` and re-label as needed. A merge conflict with
+  the moved branch has to be resolved by hand before the push. The log of each failed
+  attempt is in the run log (the token is redacted).
 - **Reviewer keeps requesting the same thing**: the acceptance criteria are probably
   ambiguous; clarify the issue or decide yourself in a review.
