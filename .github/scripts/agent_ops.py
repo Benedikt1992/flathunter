@@ -646,6 +646,16 @@ UPDATE_ADVICE = {
 }
 
 
+def is_update_candidate(pr: dict) -> bool:
+    """True for an open PR that may be updated at all: agent branch, same repository, idle."""
+    labels = {label["name"] for label in pr.get("labels", [])}
+    return (
+        issue_from_branch(pr["headRefName"]) is not None
+        and "agent:in-progress" not in labels
+        and not pr.get("isCrossRepository")
+    )
+
+
 def select_branch_updates(prs: list[dict], behind_by: dict[int, int]) -> list[int]:
     """Open agent PRs to bring up to date: behind the base, not running, same repository.
 
@@ -656,17 +666,13 @@ def select_branch_updates(prs: list[dict], behind_by: dict[int, int]) -> list[in
     Returns:
         PR numbers, sorted and unique.
     """
-    selected = set()
-    for pr in prs:
-        labels = {label["name"] for label in pr.get("labels", [])}
-        if (
-            behind_by.get(pr["number"], 0) > 0
-            and issue_from_branch(pr["headRefName"]) is not None
-            and "agent:in-progress" not in labels
-            and not pr.get("isCrossRepository")
-        ):
-            selected.add(pr["number"])
-    return sorted(selected)
+    return sorted(
+        {
+            pr["number"]
+            for pr in prs
+            if behind_by.get(pr["number"], 0) > 0 and is_update_candidate(pr)
+        }
+    )
 
 
 def update_marker(base_sha: str) -> str:
@@ -743,20 +749,32 @@ def _incoming_workflow_files(ctx: UpdateContext) -> list[str]:
     return [line for line in diff.stdout.splitlines() if line.strip()]
 
 
+def _check_out_pr_head(ctx: UpdateContext, branch: str) -> bool:
+    """Fetch the PR branch and check out its head detached. False if either step failed."""
+    if _git("fetch", ctx.url, f"refs/heads/{branch}").returncode != 0:
+        return False
+    return _git("checkout", "-q", "--detach", "FETCH_HEAD").returncode == 0
+
+
+def _abort_merge() -> None:
+    """Undo a failed merge; reset hard if git cannot abort it, so the next PR starts clean."""
+    if _git("merge", "--abort").returncode != 0:
+        _git("reset", "-q", "--hard")
+
+
 def _update_pr_branch(pr: dict, ctx: UpdateContext) -> str:
     """Merge the base into one PR branch and push it. Returns updated|skipped|refused|failed."""
     number, branch = pr["number"], pr["headRefName"]
-    fetched = _git("fetch", ctx.url, f"refs/heads/{branch}")
-    if fetched.returncode != 0 or _git("checkout", "-q", "--detach", "FETCH_HEAD").returncode != 0:
-        print(f"#{number}: could not fetch {branch}; skipped")
-        return "skipped"
+    if not _check_out_pr_head(ctx, branch):
+        print(f"#{number}: could not fetch or check out {branch}")
+        return "failed"
     workflows = _incoming_workflow_files(ctx)
     if workflows:
         _notify_update_refused(number, ctx, "workflows", "\n".join(workflows))
         return "refused"
     _ensure_identity(_git)
     if _git("merge", "--no-edit", f"origin/{ctx.base}").returncode != 0:
-        _git("merge", "--abort")
+        _abort_merge()
         _notify_update_refused(number, ctx, "conflict", "")
         return "refused"
     pushed = _git("push", ctx.url, f"HEAD:refs/heads/{branch}")
@@ -771,10 +789,17 @@ def _update_pr_branch(pr: dict, ctx: UpdateContext) -> str:
     return "refused" if reason == "workflows" else "failed"
 
 
-def _behind_by(base: str, pr: dict) -> int:
-    """Base commits missing in the PR head."""
-    compare = gh_json(f"repos/{repo()}/compare/{base}...{pr['headRefOid']}")
-    return int(compare.get("behind_by", 0))
+def _behind_by(base: str, pr: dict) -> int | None:
+    """Base commits missing in the PR head, or None if GitHub could not compare them."""
+    output = gh("api", f"repos/{repo()}/compare/{base}...{pr['headRefOid']}", check=False)
+    try:
+        compare = json.loads(output or "null")
+    except ValueError:
+        compare = None
+    if not isinstance(compare, dict) or "behind_by" not in compare:
+        print(f"#{pr['number']}: could not compare {pr['headRefName']} with {base}")
+        return None
+    return int(compare["behind_by"])
 
 
 def cmd_update_branches(args: argparse.Namespace) -> int:
@@ -793,10 +818,14 @@ def cmd_update_branches(args: argparse.Namespace) -> int:
     ctx = UpdateContext(args.base, base_sha, url, token)
     fields = "number,headRefName,headRefOid,labels,isCrossRepository"
     listing = gh("pr", "list", "--state", "open", "--limit", "200", "--json", fields)
-    prs = json.loads(listing or "[]")
-    behind = {pr["number"]: _behind_by(args.base, pr) for pr in prs}
-    by_number = {pr["number"]: pr for pr in prs}
-    outcomes = {n: _update_pr_branch(by_number[n], ctx) for n in select_branch_updates(prs, behind)}
+    candidates = [pr for pr in json.loads(listing or "[]") if is_update_candidate(pr)]
+    behind = {pr["number"]: _behind_by(args.base, pr) for pr in candidates}
+    # a PR GitHub could not compare fails the run, but does not stop the others
+    outcomes = {number: "failed" for number, count in behind.items() if count is None}
+    known = {number: count for number, count in behind.items() if count is not None}
+    by_number = {pr["number"]: pr for pr in candidates}
+    for number in select_branch_updates(candidates, known):
+        outcomes[number] = _update_pr_branch(by_number[number], ctx)
     for number, outcome in outcomes.items():
         print(f"#{number}: {outcome}")
     return 1 if "failed" in outcomes.values() else 0

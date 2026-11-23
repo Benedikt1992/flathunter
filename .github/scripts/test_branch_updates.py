@@ -110,7 +110,7 @@ def test_branch_update_notice_is_not_a_fix_round():
 class _Fleet:
     """Fake GitHub and git for update-branches."""
 
-    def __init__(self, monkeypatch, *, merge_rc=0, push_rc=0, push_err="", workflows=""):
+    def __init__(self, monkeypatch, *, merge_rc=0, push_rc=0, push_err="", workflows="", **fails):
         monkeypatch.setenv("GITHUB_REPOSITORY", "o/r")
         monkeypatch.setenv("APP_TOKEN", "s3cret")
         monkeypatch.delenv("AGENT_BOT_LOGIN", raising=False)
@@ -119,6 +119,8 @@ class _Fleet:
         self.gh_calls: list[tuple] = []
         self.git_calls: list[tuple] = []
         self.opts = (merge_rc, push_rc, push_err, workflows)
+        self.fails = fails  # fetch_rc, checkout_rc, abort_rc, compare (PR numbers that fail)
+        self.compared: list[str] = []
         monkeypatch.setattr(ops, "gh", self.gh)
         monkeypatch.setattr(ops, "gh_json", self.gh_json)
         monkeypatch.setattr(ops, "_git", self.git)
@@ -129,11 +131,14 @@ class _Fleet:
             return ops.json.dumps(self.prs)
         if args[:2] == ("pr", "comment"):
             self.comments.append({"user": {"login": BOT}, "body": args[-1]})
+        if args[0] == "api" and "/compare/" in args[1]:
+            self.compared.append(args[1])
+            if any(args[1].endswith(f"...sha{n}") for n in self.fails.get("compare", ())):
+                return '{"message": "Not Found", "status": "404"}'
+            return '{"behind_by": 2}'
         return ""
 
-    def gh_json(self, endpoint, *_a, **_k):
-        if "/compare/" in endpoint:
-            return {"behind_by": 2}
+    def gh_json(self, *_a, **_k):
         return list(self.comments)
 
     def git(self, *args, **_kw):
@@ -146,8 +151,12 @@ class _Fleet:
             out = "someone"
         elif args[0] == "diff":
             out = workflows
-        elif args[0] == "merge" and "--abort" not in args:
-            rc = merge_rc
+        elif args[0] == "merge":
+            rc = self.fails.get("abort_rc", 0) if "--abort" in args else merge_rc
+        elif args[0] == "fetch" and args[2].startswith("refs/heads/agent/"):
+            rc = self.fails.get("fetch_rc", 0)
+        elif args[0] == "checkout":
+            rc = self.fails.get("checkout_rc", 0)
         elif args[0] == "push":
             rc, err = push_rc, push_err
         return ops.subprocess.CompletedProcess(args, rc, out, err)
@@ -208,3 +217,44 @@ def test_update_branches_never_dispatches_a_review(monkeypatch):
     fleet = _Fleet(monkeypatch, merge_rc=1)
     _run_update()
     assert not any("workflow" in " ".join(call) for call in fleet.gh_calls)
+
+
+def test_update_branches_compares_only_update_candidates(monkeypatch):
+    fleet = _Fleet(monkeypatch)
+    fleet.prs += [_pr(6, "feature/x"), _pr(8, cross=True)]
+    assert _run_update() == 0
+    assert fleet.compared == ["repos/o/r/compare/fork-main...sha3"]
+
+
+def test_update_branches_failed_compare_fails_run_but_updates_others(monkeypatch):
+    fleet = _Fleet(monkeypatch, compare=(3,))
+    fleet.prs.append(_pr(5))
+    assert _run_update() == 1
+    assert [p[2] for p in fleet.pushes()] == ["HEAD:refs/heads/agent/issue-5"]
+
+
+def test_update_branches_fetch_failure_fails_the_run(monkeypatch):
+    fleet = _Fleet(monkeypatch, fetch_rc=1)
+    assert _run_update() == 1
+    assert fleet.pushes() == []
+    assert fleet.comments == []
+
+
+def test_update_branches_checkout_failure_fails_the_run(monkeypatch):
+    fleet = _Fleet(monkeypatch, checkout_rc=1)
+    assert _run_update() == 1
+    assert not any(call[0] == "merge" for call in fleet.git_calls)
+    assert fleet.pushes() == []
+
+
+def test_update_branches_failed_merge_abort_resets(monkeypatch):
+    fleet = _Fleet(monkeypatch, merge_rc=1, abort_rc=1)
+    assert _run_update() == 0
+    assert ("reset", "-q", "--hard") in fleet.git_calls
+    assert fleet.pushes() == []
+
+
+def test_update_branches_merge_abort_success_needs_no_reset(monkeypatch):
+    fleet = _Fleet(monkeypatch, merge_rc=1)
+    assert _run_update() == 0
+    assert not any(call[0] == "reset" for call in fleet.git_calls)

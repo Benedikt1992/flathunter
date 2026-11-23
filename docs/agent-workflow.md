@@ -200,6 +200,9 @@ branch commit (marker `<!-- agent-branch-update base=<sha> -->`) with the reason
 - *other error*: click **Update branch**; if that fails too, open the run log. The run
   fails in this case, so it shows up in the Actions tab.
 
+If GitHub cannot compare a PR with the default branch, or its branch cannot be fetched, that PR
+gets no comment, but the run fails (Actions tab). The other PRs are still updated.
+
 ## Quality gates in the agent loop
 
 The static gates are defined once in `.pre-commit-config.yaml` and run in three places:
