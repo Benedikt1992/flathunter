@@ -197,7 +197,7 @@ jobs:
           BASE_SHA: ${{ steps.prep.outputs.base_sha }}
           AGENT_BOT_LOGIN: ${{ steps.bot.outputs.name }}
         run: |
-          git push "https://x-access-token:${APP_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/${BRANCH}"
+          python3 "$OPS" push-branch "$BRANCH"
           pointer=$(python3 "$OPS" questions-pointer pr "$RUNNER_TEMP/result.json" | sed -n 's/^pointer=//p')
           jq -r --arg issue "$ISSUE" --arg q "$pointer" '
             "Closes #\($issue)\n\n## Summary\n\n\(.summary)\n\n## Test plan\n\n\(.test_plan)\n\n" +
@@ -220,8 +220,45 @@ jobs:
         if: steps.pr.outputs.number != ''
         run: gh workflow run agent-review.yml --ref "$DEFAULT_BRANCH" -f pr="${{ steps.pr.outputs.number }}"
 
+      - name: Save unpushed work
+        if: failure() && steps.pr.outcome == 'failure'
+        id: save
+        env:
+          BASE_SHA: ${{ steps.prep.outputs.base_sha }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/agent-work"
+          git bundle create "$RUNNER_TEMP/agent-work/work.bundle" "$BASE_SHA"..HEAD
+          cp "$RUNNER_TEMP/result.json" "$RUNNER_TEMP/agent-work/result.json"
+          echo "saved=true" >> "$GITHUB_OUTPUT"
+
+      - name: Upload unpushed work
+        if: failure() && steps.save.outputs.saved == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-work-issue-${{ github.run_id }}
+          path: ${{ runner.temp }}/agent-work
+          retention-days: 14
+          if-no-files-found: ignore
+
       - name: Report failure
         if: failure()
+        env:
+          SAVED: ${{ steps.save.outputs.saved }}
+          BRANCH: ${{ steps.gate.outputs.branch }}
         run: |
           gh issue edit "$ISSUE" --add-label agent:stuck --remove-label agent:in-progress || true
-          gh issue comment "$ISSUE" --body "⚠️ Agent workflow failed. [Run log]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)"
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          {
+            echo "⚠️ Agent workflow failed. [Run log]($run_url)"
+            if [ "$SAVED" = "true" ]; then
+              echo
+              echo "The push failed, but the work is saved as artifact \`agent-work-issue-$GITHUB_RUN_ID\` (14 days): \`work.bundle\` (commits) and \`result.json\` (title, summary, test plan). To push it by hand:"
+              echo
+              echo '```bash'
+              echo "gh run download $GITHUB_RUN_ID -n agent-work-issue-$GITHUB_RUN_ID -D agent-work"
+              echo "git fetch agent-work/work.bundle HEAD:$BRANCH"
+              echo "git push origin $BRANCH"
+              echo '```'
+            fi
+          } > "$RUNNER_TEMP/failure.md"
+          gh issue comment "$ISSUE" --body-file "$RUNNER_TEMP/failure.md"

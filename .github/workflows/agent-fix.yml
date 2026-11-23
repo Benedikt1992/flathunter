@@ -166,7 +166,7 @@ jobs:
           printf '%s' "$OUT" > "$RUNNER_TEMP/result.json"
           commits=$(git rev-list --count "$BASE_SHA"..HEAD)
           if [ "$commits" -gt 0 ]; then
-            git push "https://x-access-token:${APP_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/${BRANCH}"
+            python3 "$OPS" push-branch "$BRANCH"
           fi
           if [ "$MODE" = "human" ]; then
             GH_TOKEN="$APP_TOKEN" python3 "$OPS" post-replies "$PR" "$RUNNER_TEMP/result.json"
@@ -197,8 +197,45 @@ jobs:
         if: steps.push.outputs.action == 'stuck'
         run: gh pr edit "$PR" --add-label agent:stuck --remove-label agent:in-progress || true
 
+      - name: Save unpushed work
+        if: failure() && steps.push.outcome == 'failure'
+        id: save
+        env:
+          BASE_SHA: ${{ steps.prep.outputs.base_sha }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/agent-work"
+          git bundle create "$RUNNER_TEMP/agent-work/work.bundle" "$BASE_SHA"..HEAD
+          cp "$RUNNER_TEMP/result.json" "$RUNNER_TEMP/agent-work/result.json"
+          echo "saved=true" >> "$GITHUB_OUTPUT"
+
+      - name: Upload unpushed work
+        if: failure() && steps.save.outputs.saved == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-work-pr-${{ github.run_id }}
+          path: ${{ runner.temp }}/agent-work
+          retention-days: 14
+          if-no-files-found: ignore
+
       - name: Report failure
         if: failure()
+        env:
+          SAVED: ${{ steps.save.outputs.saved }}
+          BRANCH: ${{ steps.info.outputs.branch }}
         run: |
           gh pr edit "$PR" --add-label agent:stuck --remove-label agent:in-progress || true
-          gh pr comment "$PR" --body "⚠️ Fix workflow failed. [Run log]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)"
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          {
+            echo "⚠️ Fix workflow failed. [Run log]($run_url)"
+            if [ "$SAVED" = "true" ]; then
+              echo
+              echo "The push failed, but the work is saved as artifact \`agent-work-pr-$GITHUB_RUN_ID\` (14 days): \`work.bundle\` (commits) and \`result.json\`. To push it by hand:"
+              echo
+              echo '```bash'
+              echo "gh run download $GITHUB_RUN_ID -n agent-work-pr-$GITHUB_RUN_ID -D agent-work"
+              echo "git checkout $BRANCH && git pull agent-work/work.bundle HEAD"
+              echo "git push origin $BRANCH"
+              echo '```'
+            fi
+          } > "$RUNNER_TEMP/failure.md"
+          gh pr comment "$PR" --body-file "$RUNNER_TEMP/failure.md"
