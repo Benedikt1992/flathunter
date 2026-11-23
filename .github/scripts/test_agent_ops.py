@@ -1,6 +1,7 @@
 """Tests for the pure policy logic in agent_ops (run with `python -m pytest .github/scripts`)."""
 
 import agent_ops as ops
+import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
@@ -782,3 +783,108 @@ def test_questions_pointer_command_counts_valid_entries(tmp_path, capsys):
     args = ops.argparse.Namespace(phase="pr", result=str(result))
     assert ops.cmd_questions_pointer(args) == 0
     assert "pointer=1 question, one review thread each" in capsys.readouterr().out
+
+
+RUN_URL = "https://github.com/o/r/actions/runs/7"
+
+
+def test_fix_round_failed_without_commits_is_stuck():
+    assert ops.fix_round_decision("failure", {"status": "done"}, 0) == (True, "stuck")
+    assert ops.fix_round_decision("success", {}, 0) == (True, "stuck")
+
+
+def test_fix_round_failed_with_commits_rereviews():
+    assert ops.fix_round_decision("failure", {}, 2) == (True, "rereview")
+    run = ops.FixRun("ci", "failed", 2, failed=True, run_url=RUN_URL)
+    body = ops.render_fix_round(run, None, "")
+    assert "failed" in body.lower()
+    assert f"[Run log]({RUN_URL})" in body
+    assert "2 new commit(s)" in body
+    assert "re-review" in body
+
+
+def test_render_fix_round_failed_links_run_log():
+    run = ops.FixRun("ci", "failed", 0, failed=True, run_url=RUN_URL)
+    body = ops.render_fix_round(run, None, "")
+    assert body.splitlines()[0] == "<!-- agent-fix-round mode=ci failed -->"
+    assert f"[Run log]({RUN_URL})" in body
+
+
+def test_failed_round_with_commits_keeps_counting():
+    run = ops.FixRun("ci", "failed", 1, failed=True, run_url=RUN_URL)
+    body = ops.render_fix_round(run, None, "")
+    assert body.splitlines()[0] == "<!-- agent-fix-round mode=ci -->"
+    assert ops.count_fix_rounds([{"body": body}]) == 1
+
+
+def test_count_fix_rounds_ignores_failed_rounds():
+    comments = [
+        {"body": "<!-- agent-fix-round mode=review -->"},
+        {"body": "<!-- agent-fix-round mode=ci -->"},
+        {"body": "<!-- agent-fix-round mode=ci failed -->"},
+        {"body": "<!-- agent-fix-round mode=human -->"},
+    ]
+    assert ops.count_fix_rounds(comments) == 2
+
+
+def test_count_fix_rounds_reads_marker_line_only():
+    body = "<!-- agent-fix-round mode=ci -->\n### x\nsummary: failed, mode=human"
+    assert ops.count_fix_rounds([{"body": body}]) == 1
+
+
+@pytest.mark.parametrize("status", ["done", "partial", "blocked"])
+@pytest.mark.parametrize("commits", [0, 2])
+def test_fix_round_regular_statuses_unchanged(status, commits):
+    failed, action = ops.fix_round_decision("success", {"status": status}, commits)
+    assert not failed
+    assert action == ("rereview" if commits else "maintainer")
+    run = ops.FixRun("ci", status, commits, failed=False, run_url=RUN_URL)
+    body = ops.render_fix_round(run, "All fixed", "1 question")
+    assert body == (
+        "<!-- agent-fix-round mode=ci -->\n"
+        f"### 🔧 Fix round (`ci`) — status `{status}`, {commits} new commit(s)\n\n"
+        "All fixed\n\n**Open questions:** 1 question"
+    )
+
+
+def test_render_fix_round_without_summary():
+    run = ops.FixRun("ci", "done", 0, failed=False, run_url=RUN_URL)
+    body = ops.render_fix_round(run, None, "")
+    assert body.endswith("\n\n_no summary_")
+    assert "Run log" not in body
+
+
+def test_fix_round_command_outputs_action(tmp_path, capsys):
+    result = tmp_path / "r.json"
+    result.write_text("not json")
+    out = tmp_path / "round.md"
+    args = ops.argparse.Namespace(
+        mode="ci",
+        outcome="failure",
+        commits=0,
+        result=str(result),
+        pointer="",
+        run_url=RUN_URL,
+        out=str(out),
+    )
+    assert ops.cmd_fix_round(args) == 0
+    printed = capsys.readouterr().out
+    assert "action=stuck" in printed
+    assert "failed=true" in printed
+    assert "action=maintainer" not in printed
+    body = out.read_text()
+    assert "failed -->" in body
+    assert RUN_URL in body
+
+
+@given(st.lists(st.tuples(st.sampled_from(["review", "ci", "human"]), st.booleans()), max_size=6))
+def test_count_fix_rounds_property(rounds):
+    comments = [{"body": ops.fix_marker(m, uncounted=f)} for m, f in rounds]
+    expected = sum(1 for m, f in rounds if m != "human" and not f)
+    assert ops.count_fix_rounds(comments) == expected
+
+
+@given(st.sampled_from(["success", "failure"]), st.sampled_from(["done", ""]), st.integers(0, 5))
+def test_fix_round_action_property(outcome, status, commits):
+    _, action = ops.fix_round_decision(outcome, {"status": status}, commits)
+    assert (action == "rereview") == (commits > 0)

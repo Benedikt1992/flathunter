@@ -156,6 +156,7 @@ jobs:
         id: push
         env:
           OUT: ${{ steps.claude.outputs.structured_output }}
+          OUTCOME: ${{ steps.claude.outcome }}
           APP_TOKEN: ${{ steps.app.outputs.token }}
           BRANCH: ${{ steps.info.outputs.branch }}
           BASE_SHA: ${{ steps.prep.outputs.base_sha }}
@@ -164,7 +165,6 @@ jobs:
           [ -n "$OUT" ] || OUT='{}'
           printf '%s' "$OUT" > "$RUNNER_TEMP/result.json"
           commits=$(git rev-list --count "$BASE_SHA"..HEAD)
-          status=$(jq -r '.status // "failed"' "$RUNNER_TEMP/result.json")
           if [ "$commits" -gt 0 ]; then
             git push "https://x-access-token:${APP_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/${BRANCH}"
           fi
@@ -175,26 +175,27 @@ jobs:
           GH_TOKEN="$APP_TOKEN" python3 "$OPS" post-questions pr "$PR" "$RUNNER_TEMP/result.json" \
             --diff "$RUNNER_TEMP/pr.diff" --sha "$(git rev-parse HEAD)"
           pointer=$(python3 "$OPS" questions-pointer pr "$RUNNER_TEMP/result.json" | sed -n 's/^pointer=//p')
-          {
-            echo "<!-- agent-fix-round mode=$MODE -->"
-            echo "### 🔧 Fix round (\`$MODE\`) — status \`$status\`, $commits new commit(s)"
-            echo
-            jq -r '.summary // "_no summary_"' "$RUNNER_TEMP/result.json"
-            if [ -n "$pointer" ]; then echo; echo "**Open questions:** $pointer"; fi
-          } > "$RUNNER_TEMP/round.md"
+          action=$(python3 "$OPS" fix-round --mode "$MODE" --outcome "$OUTCOME" \
+            --commits "$commits" --result "$RUNNER_TEMP/result.json" --pointer "$pointer" \
+            --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            --out "$RUNNER_TEMP/round.md" | sed -n 's/^action=//p')
           GH_TOKEN="$APP_TOKEN" gh pr comment "$PR" --body-file "$RUNNER_TEMP/round.md"
           echo "commits=$commits" >> "$GITHUB_OUTPUT"
-          echo "status=$status" >> "$GITHUB_OUTPUT"
+          echo "action=$action" >> "$GITHUB_OUTPUT"
 
       - name: Re-review
-        if: steps.push.outputs.commits != '' && steps.push.outputs.commits != '0'
+        if: steps.push.outputs.action == 'rereview'
         run: gh workflow run agent-review.yml --ref "$DEFAULT_BRANCH" -f pr="$PR"
 
       - name: Nothing changed → back to the maintainer
-        if: steps.push.outputs.commits == '0'
+        if: steps.push.outputs.action == 'maintainer'
         run: |
           gh pr edit "$PR" --add-label needs-human --remove-label agent:in-progress || true
           gh pr edit "$PR" --add-reviewer "$MAINTAINER" || true
+
+      - name: Failed run → agent:stuck
+        if: steps.push.outputs.action == 'stuck'
+        run: gh pr edit "$PR" --add-label agent:stuck --remove-label agent:in-progress || true
 
       - name: Report failure
         if: failure()

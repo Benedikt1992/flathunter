@@ -79,7 +79,7 @@ criteria, non-goals, hints on the approach), and restart with `agent:plan`.
 | `agent:queued` | agent | waiting for a free slot (`AGENT_MAX_PARALLEL`) |
 | `agent:in-progress` | agent | an agent is working |
 | `agent:blocked` | agent | open questions for you |
-| `agent:stuck` | agent | workflow failed or round limit reached |
+| `agent:stuck` | agent | workflow failed, fix session failed without new commits, or round limit reached |
 | `needs-human` | agent | ready for your review |
 | `allow-*` | you | gate overrides for one PR |
 
@@ -193,7 +193,7 @@ without your `allow-suppression` label. Tooling rationale: [ADR 0002](adr/0002-p
 ## Costs and limits
 Each implementation is one model session (≤ 120 turns), each review/fix round another one.
 Jobs have timeouts (60–75 min). Tune `AGENT_MAX_PARALLEL`, `AGENT_MAX_ROUNDS` and the models
-via repository variables.
+via repository variables. Failed fixer runs without commits do not use up `AGENT_MAX_ROUNDS`.
 
 ## Troubleshooting
 - **Nothing happens after labelling**: was the label added by `AGENT_MAINTAINER`? Is the
@@ -206,5 +206,13 @@ via repository variables.
   for bot actors that are not allowed. Every `claude-code-action` step in the dispatchable
   `agent-*.yml` workflows must set `allowed_bots: github-actions` (never `'*'`, which
   would allow every GitHub App). `.github/scripts/test_workflow_allowed_bots.py` checks this.
+- **"Fix round … failed" comment on a PR**: the fixer session failed (the step failed or it
+  returned no structured result). The comment links the run log. Without new commits the
+  PR gets `agent:stuck` (not `needs-human`) and the maintainer is not asked for a review;
+  with new commits they are pushed and re-reviewed as usual. A failed run without commits
+  does not count against `AGENT_MAX_ROUNDS` (its comment starts with
+  `<!-- agent-fix-round mode=… failed -->`). A failed run that produced commits still counts,
+  so a repeating loop is stopped. To restart: fix the cause, then request changes in a
+  review or re-dispatch `agent-fix.yml`.
 - **Reviewer keeps requesting the same thing**: the acceptance criteria are probably
   ambiguous; clarify the issue or decide yourself in a review.
