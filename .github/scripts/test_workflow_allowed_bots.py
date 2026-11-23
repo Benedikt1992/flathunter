@@ -11,7 +11,7 @@ from pathlib import Path
 WORKFLOWS = Path(__file__).resolve().parent.parent / "workflows"
 ACTION = "anthropics/claude-code-action"
 ALLOWED = re.compile(r"^\s*allowed_bots:\s*github-actions\s*$")
-WILDCARD = re.compile(r"^\s*allowed_bots:\s*[\"']?\*")
+WILDCARD = re.compile(r"^\s*allowed_bots:.*\*")
 DISPATCH = re.compile(r"^\s*workflow_dispatch\s*:", re.MULTILINE)
 
 
@@ -46,7 +46,11 @@ def dispatchable_workflows() -> list[Path]:
 
 
 def test_finds_the_agent_steps() -> None:
-    names = {path.name for path in dispatchable_workflows() if action_steps(path.read_text())}
+    names = {
+        path.name
+        for path in dispatchable_workflows()
+        if action_steps(path.read_text(encoding="utf-8"))
+    }
     assert {"agent-implement.yml", "agent-review.yml", "agent-fix.yml"} <= names
 
 
@@ -73,6 +77,18 @@ def test_every_dispatchable_action_step_allows_github_actions() -> None:
             assert any(ALLOWED.match(line) for line in step), (
                 f"{path.name}: claude-code-action step lacks `allowed_bots: github-actions`"
             )
+
+
+def test_wildcard_pattern_finds_star_anywhere_in_the_value() -> None:
+    for line in (
+        "  allowed_bots: '*'",
+        '  allowed_bots: "*"',
+        "  allowed_bots: github-actions,*",
+        "  allowed_bots: github-actions, '*'",
+    ):
+        assert WILDCARD.match(line), line
+    assert not WILDCARD.match("  allowed_bots: github-actions")
+    assert not WILDCARD.match("  # allowed_bots: github-actions")
 
 
 def test_no_workflow_allows_all_bots() -> None:
