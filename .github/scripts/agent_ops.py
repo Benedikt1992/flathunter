@@ -641,22 +641,30 @@ def is_agent(comment: dict, logins: Sequence[str]) -> bool:
 
 
 def thread_view(thread: dict, owner: str, logins: Sequence[str]) -> dict | None:
-    """The part of an unresolved review thread an agent may see, or None to skip it."""
+    """The part of a review thread an agent may see, or None to skip it.
+
+    Unresolved threads are shown with their `reply_to_id`. A resolved thread is only
+    shown if it is an agent's question the maintainer answered; it is marked `resolved`
+    and has no `reply_to_id`, so nobody replies in it.
+    """
     comments = thread["comments"]["nodes"]
-    if thread["isResolved"] or not comments:
+    if not comments:
         return None
     first = comments[0]
     qid = question_id(first.get("body"))
     is_question = qid is not None and is_agent(first, logins)
-    if not is_question and not any(same_login(_login(c), owner) for c in comments):
+    answered = any(same_login(_login(c), owner) for c in comments)
+    resolved = bool(thread["isResolved"])
+    if resolved and not (is_question and answered):
         return None
-    view = {
-        "reply_to_id": first["databaseId"],
-        "path": thread["path"],
-        "line": thread["line"],
-    }
+    if not is_question and not answered:
+        return None
+    view: dict = {"path": thread["path"], "line": thread["line"]}
+    if resolved:
+        view["resolved"] = True
+    else:
+        view["reply_to_id"] = first["databaseId"]
     if is_question:
-        answered = any(same_login(_login(c), owner) for c in comments)
         view["question_id"] = qid
         view["status"] = STATUS_ANSWERED if answered else STATUS_OPEN
     # only the maintainer's and the agents' own comments, never third parties or other bots
@@ -668,10 +676,11 @@ def thread_view(thread: dict, owner: str, logins: Sequence[str]) -> dict | None:
 def human_feedback(
     data: dict, owner: str, logins: Sequence[str] = (REVIEW_BOT,)
 ) -> tuple[str, list[dict]]:
-    """Latest maintainer review body and the unresolved threads an agent should see.
+    """Latest maintainer review body and the threads an agent should see.
 
-    That is every thread the maintainer participates in, plus every question thread of
-    an agent identity (with status `offen` until the maintainer answered).
+    That is every unresolved thread the maintainer participates in, plus every question
+    thread of an agent identity (with status `offen` until the maintainer answered).
+    Resolved threads only count if they are answered question threads (see `thread_view`).
     """
     pull = data["data"]["repository"]["pullRequest"]
     reviews = [r for r in pull["reviews"]["nodes"] if same_login(_login(r), owner)]
@@ -686,11 +695,13 @@ def render_question_threads(threads: list[dict]) -> str:
     for thread in threads:
         if "question_id" not in thread:
             continue
-        parts.append(
-            f"### Question {thread['question_id']} — {thread['status']} "
-            f"(thread `reply_to_id={thread['reply_to_id']}`, "
-            f"`{thread['path']}:{thread['line']}`)"
+        where = f"`{thread['path']}:{thread['line']}`"
+        target = (
+            f"resolved, do not reply; {where}"
+            if thread.get("resolved")
+            else f"thread `reply_to_id={thread['reply_to_id']}`, {where}"
         )
+        parts.append(f"### Question {thread['question_id']} — {thread['status']} ({target})")
         for comment in thread["conversation"]:
             parts += [f"**{comment['author']}:** {comment['body']}", ""]
     return "\n".join(parts)
