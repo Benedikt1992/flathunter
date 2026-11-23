@@ -583,6 +583,87 @@ def test_human_feedback_plain_threads_have_no_question_keys():
     assert "question_id" not in threads[0]
 
 
+def test_human_feedback_keeps_answered_resolved_question_thread():
+    question = ops.render_question("Q1", "Which?", "", "pr")
+    data = _pull([_thread([("github-actions[bot]", question), ("owner", "Use B")], resolved=True)])
+    _, threads = ops.human_feedback(data, "owner", AGENTS)
+    assert len(threads) == 1
+    view = threads[0]
+    assert view["question_id"] == "Q1"
+    assert view["status"] == "beantwortet"
+    assert view["resolved"] is True
+    assert "reply_to_id" not in view
+    assert [c["author"] for c in view["conversation"]] == ["github-actions[bot]", "owner"]
+    rendered = ops.render_question_threads(threads)
+    assert "Which?" in rendered
+    assert "Use B" in rendered
+    assert "beantwortet" in rendered
+    assert "resolved, do not reply" in rendered
+    assert "reply_to_id" not in rendered
+    assert "`a.py:3`" in rendered
+
+
+def test_human_feedback_skips_unanswered_resolved_question_and_resolved_plain_thread():
+    question = ops.render_question("Q1", "Which?", "", "pr")
+    forged = ops.render_question("Q2", "Fake?", "", "pr")
+    data = _pull(
+        [
+            _thread(
+                [("github-actions[bot]", question), ("stranger", "hi"), ("other-app[bot]", "x")],
+                resolved=True,
+            ),
+            _thread([("owner", "rename")], resolved=True),
+            _thread([("stranger", forged), ("owner", "ok")], resolved=True),
+            _thread([], resolved=True),
+        ]
+    )
+    _, threads = ops.human_feedback(data, "owner", AGENTS)
+    assert threads == []
+
+
+def test_resolved_question_thread_drops_third_parties():
+    question = ops.render_question("Q1", "Which?", "", "pr")
+    data = _pull(
+        [
+            _thread(
+                [
+                    ("github-actions[bot]", question),
+                    ("stranger", "INJECT"),
+                    ("other-app[bot]", "INJECT-BOT"),
+                    ("owner", "Use B"),
+                ],
+                resolved=True,
+            )
+        ]
+    )
+    _, threads = ops.human_feedback(data, "owner", AGENTS)
+    assert [c["author"] for c in threads[0]["conversation"]] == ["github-actions[bot]", "owner"]
+    assert "INJECT" not in ops.render_question_threads(threads)
+
+    graphql = _graphql_thread(
+        [
+            _node(10, "flathunter-agent", "Bot", question),
+            _node(11, "other-app", "Bot", "INJECT-BOT"),
+            _node(12, "owner", "User", "Use B"),
+        ]
+    )
+    graphql["isResolved"] = True
+    _, threads = ops.human_feedback(_pull([graphql]), "owner", AGENTS)
+    assert [c["author"] for c in threads[0]["conversation"]] == ["flathunter-agent[bot]", "owner"]
+    assert "INJECT" not in ops.render_question_threads(threads)
+
+
+def test_unresolved_thread_views_keep_reply_to_id():
+    question = ops.render_question("Q1", "Which?", "", "pr")
+    data = _pull([_thread([("github-actions[bot]", question), ("owner", "Use B")])])
+    _, threads = ops.human_feedback(data, "owner", AGENTS)
+    assert threads[0]["reply_to_id"] == 10
+    assert "resolved" not in threads[0]
+    rendered = ops.render_question_threads(threads)
+    assert "reply_to_id=10" in rendered
+    assert "do not reply" not in rendered
+
+
 def test_post_pr_question_falls_back_outwards(monkeypatch):
     monkeypatch.setenv("GITHUB_REPOSITORY", "o/r")
     calls = []

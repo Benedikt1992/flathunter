@@ -60,7 +60,9 @@ The plan, blocked and round comments only say how many questions there are.
   thread (PR comments: Quote reply or `Q3:`), then submit a review with **Request changes**.
 - The next run sees every question with its status (`beantwortet` or `offen`) and your
   answers. Only your answers count; comments of others never reach an agent. Unresolved
-  question threads block the merge (conversation resolution), so none gets lost.
+  question threads block the merge (conversation resolution), so none gets lost. You may
+  resolve a question thread once you have answered it: the next run still sees the question
+  and your answer (status `beantwortet`), but does not reply in that thread.
 - IDs are unique per issue and per PR, they do not continue from one to the other.
 
 If a PR is fundamentally on the wrong track: close it, sharpen the issue (acceptance
