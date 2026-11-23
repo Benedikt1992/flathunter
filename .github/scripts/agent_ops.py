@@ -626,6 +626,94 @@ def select_startable(
     return startable[: max(free_slots, 0)]
 
 
+# --------------------------------------------------------------------------- branch updates
+
+UPDATE_MARKER = "<!-- agent-branch-update"
+UPDATE_DETAIL_LIMIT = 300
+UPDATE_ADVICE = {
+    "conflict": (
+        "`{base}` could not be merged into this branch without a conflict. Please resolve the "
+        "conflict (locally or in the web editor); the agent does not resolve conflicts."
+    ),
+    "workflows": (
+        "The new `{base}` commits change files under `.github/workflows/`, and the agent app "
+        "may not push those. Please click **Update branch** on this PR."
+    ),
+    "other": (
+        "The automatic update failed. Please click **Update branch** on this PR; if that fails "
+        "too, check the run log."
+    ),
+}
+
+
+def is_update_candidate(pr: dict) -> bool:
+    """True for an open PR that may be updated at all: agent branch, same repository, idle."""
+    labels = {label["name"] for label in pr.get("labels", [])}
+    return (
+        issue_from_branch(pr["headRefName"]) is not None
+        and "agent:in-progress" not in labels
+        and not pr.get("isCrossRepository")
+    )
+
+
+def select_branch_updates(prs: list[dict], behind_by: dict[int, int]) -> list[int]:
+    """Open agent PRs to bring up to date: behind the base, not running, same repository.
+
+    Args:
+        prs: Open PRs with `number`, `headRefName`, `labels` and `isCrossRepository`.
+        behind_by: Number of base commits missing in each PR branch, by PR number.
+
+    Returns:
+        PR numbers, sorted and unique.
+    """
+    return sorted(
+        {
+            pr["number"]
+            for pr in prs
+            if behind_by.get(pr["number"], 0) > 0 and is_update_candidate(pr)
+        }
+    )
+
+
+def update_marker(base_sha: str) -> str:
+    """First line of a branch-update notice; one notice per base commit."""
+    return f"{UPDATE_MARKER} base={base_sha} -->"
+
+
+def update_notice_needed(comments: list[dict], base_sha: str, logins: Sequence[str]) -> bool:
+    """False if an agent identity already posted a notice for this base commit."""
+    marker = update_marker(base_sha)
+    for comment in comments:
+        login = (comment.get("user") or {}).get("login")
+        first = (comment.get("body") or "").split("\n", 1)[0]
+        if first == marker and any(same_login(login, agent) for agent in logins):
+            return False
+    return True
+
+
+def classify_update_failure(
+    changed_workflows: Sequence[str], error: str, *, conflict: bool = False
+) -> str:
+    """Why an update was refused: `conflict`, `workflows` or `other`."""
+    if conflict:
+        return "conflict"
+    lowered = error.lower()
+    if changed_workflows or ("workflow" in lowered and "permission" in lowered):
+        return "workflows"
+    return "other"
+
+
+def render_update_notice(
+    reason: str, base_sha: str, detail: str, base: str = "the base branch"
+) -> str:
+    """Comment that tells the maintainer why the branch was not updated and what to do."""
+    lines = [update_marker(base_sha), "### ⚠️ Branch not updated automatically", ""]
+    lines.append(UPDATE_ADVICE[reason].format(base=base))
+    if detail.strip():
+        lines += ["", "```", detail.strip()[:UPDATE_DETAIL_LIMIT], "```"]
+    return "\n".join(lines)
+
+
 # --------------------------------------------------------------------------- commands
 
 
@@ -634,6 +722,113 @@ def cmd_push_branch(args: argparse.Namespace) -> int:
     token = os.environ.get("APP_TOKEN", "")
     url = args.remote or f"https://x-access-token:{token}@github.com/{repo()}.git"
     return 0 if push_branch(args.branch, url, token=token) else 1
+
+
+@dataclass(frozen=True)
+class UpdateContext:
+    """What every PR update needs: the base branch, its commit, and the push URL."""
+
+    base: str
+    base_sha: str
+    url: str
+    token: str
+
+
+def _notify_update_refused(pr: int, ctx: UpdateContext, reason: str, detail: str) -> None:
+    """Comment once per base commit on a PR that could not be updated."""
+    comments = gh_json(f"repos/{repo()}/issues/{pr}/comments?per_page=100", "--paginate")
+    if not update_notice_needed(comments, ctx.base_sha, agent_logins()):
+        return
+    body = render_update_notice(reason, ctx.base_sha, detail, ctx.base)
+    gh("pr", "comment", str(pr), "--body", body)
+
+
+def _incoming_workflow_files(ctx: UpdateContext) -> list[str]:
+    """Workflow files the base branch changed since this branch left it."""
+    diff = _git("diff", "--name-only", f"HEAD...origin/{ctx.base}", "--", ".github/workflows/")
+    return [line for line in diff.stdout.splitlines() if line.strip()]
+
+
+def _check_out_pr_head(ctx: UpdateContext, branch: str) -> bool:
+    """Fetch the PR branch and check out its head detached. False if either step failed."""
+    if _git("fetch", ctx.url, f"refs/heads/{branch}").returncode != 0:
+        return False
+    return _git("checkout", "-q", "--detach", "FETCH_HEAD").returncode == 0
+
+
+def _abort_merge() -> None:
+    """Undo a failed merge; reset hard if git cannot abort it, so the next PR starts clean."""
+    if _git("merge", "--abort").returncode != 0:
+        _git("reset", "-q", "--hard")
+
+
+def _update_pr_branch(pr: dict, ctx: UpdateContext) -> str:
+    """Merge the base into one PR branch and push it. Returns updated|skipped|refused|failed."""
+    number, branch = pr["number"], pr["headRefName"]
+    if not _check_out_pr_head(ctx, branch):
+        print(f"#{number}: could not fetch or check out {branch}")
+        return "failed"
+    workflows = _incoming_workflow_files(ctx)
+    if workflows:
+        _notify_update_refused(number, ctx, "workflows", "\n".join(workflows))
+        return "refused"
+    _ensure_identity(_git)
+    if _git("merge", "--no-edit", f"origin/{ctx.base}").returncode != 0:
+        _abort_merge()
+        _notify_update_refused(number, ctx, "conflict", "")
+        return "refused"
+    pushed = _git("push", ctx.url, f"HEAD:refs/heads/{branch}")
+    if pushed.returncode == 0:
+        return "updated"
+    error = redact(f"{pushed.stderr or ''}{pushed.stdout or ''}".strip(), ctx.token)
+    if _is_non_fast_forward(error):
+        print(f"#{number}: {branch} moved while updating; the next run retries")
+        return "skipped"
+    reason = classify_update_failure([], error)
+    _notify_update_refused(number, ctx, reason, error)
+    return "refused" if reason == "workflows" else "failed"
+
+
+def _behind_by(base: str, pr: dict) -> int | None:
+    """Base commits missing in the PR head, or None if GitHub could not compare them."""
+    output = gh("api", f"repos/{repo()}/compare/{base}...{pr['headRefOid']}", check=False)
+    try:
+        compare = json.loads(output or "null")
+    except ValueError:
+        compare = None
+    if not isinstance(compare, dict) or "behind_by" not in compare:
+        print(f"#{pr['number']}: could not compare {pr['headRefName']} with {base}")
+        return None
+    return int(compare["behind_by"])
+
+
+def cmd_update_branches(args: argparse.Namespace) -> int:
+    """Merge the base branch into every open agent PR that is behind it. Never rebases or forces.
+
+    The token comes from APP_TOKEN (so that CI runs on the result). Refused updates get one
+    comment per base commit; the exit code is 1 only for unexpected failures.
+    """
+    token = os.environ.get("APP_TOKEN", "")
+    url = args.remote or f"https://x-access-token:{token}@github.com/{repo()}.git"
+    fetched = _git("fetch", url, f"+refs/heads/{args.base}:refs/remotes/origin/{args.base}")
+    if fetched.returncode != 0:
+        print(f"could not fetch {args.base}: {redact(fetched.stderr or '', token)}")
+        return 1
+    base_sha = _git("rev-parse", f"origin/{args.base}").stdout.strip()
+    ctx = UpdateContext(args.base, base_sha, url, token)
+    fields = "number,headRefName,headRefOid,labels,isCrossRepository"
+    listing = gh("pr", "list", "--state", "open", "--limit", "200", "--json", fields)
+    candidates = [pr for pr in json.loads(listing or "[]") if is_update_candidate(pr)]
+    behind = {pr["number"]: _behind_by(args.base, pr) for pr in candidates}
+    # a PR GitHub could not compare fails the run, but does not stop the others
+    outcomes = {number: "failed" for number, count in behind.items() if count is None}
+    known = {number: count for number, count in behind.items() if count is not None}
+    by_number = {pr["number"]: pr for pr in candidates}
+    for number in select_branch_updates(candidates, known):
+        outcomes[number] = _update_pr_branch(by_number[number], ctx)
+    for number, outcome in outcomes.items():
+        print(f"#{number}: {outcome}")
+    return 1 if "failed" in outcomes.values() else 0
 
 
 def cmd_verify_label(args) -> int:
@@ -1256,6 +1451,11 @@ def main() -> int:
     p.add_argument("branch")
     p.add_argument("--remote", help="remote URL (default: GitHub, authenticated with APP_TOKEN)")
     p.set_defaults(func=cmd_push_branch)
+
+    p = sub.add_parser("update-branches")
+    p.add_argument("--base", required=True, help="branch to merge into the agent PRs")
+    p.add_argument("--remote", help="remote URL (default: GitHub, authenticated with APP_TOKEN)")
+    p.set_defaults(func=cmd_update_branches)
 
     p = sub.add_parser("count-rounds")
     p.add_argument("pr", type=int)

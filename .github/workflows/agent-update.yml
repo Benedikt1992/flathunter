@@ -1,0 +1,60 @@
+# Agent · Update branches
+# Trigger: every push to the default branch, and the end of an agent run
+#          (review or fix), so PRs skipped because of `agent:in-progress` catch up.
+# Result:  open agent PRs that are behind get the default branch merged in (merge only,
+#          never rebase or force-push), pushed with the agent app token so CI runs.
+#          A refused update gets one comment per default-branch commit.
+# Not triggered: no review is dispatched and the update is not a fix round.
+name: "Agent · Update branches"
+
+on:
+  push:
+    branches: [fork-main]
+  workflow_run:
+    workflows: ["Agent · Review", "Agent · Fix"]
+    types: [completed]
+
+# One global group, deliberately not agent-pr-<n>: an update must never displace a
+# waiting review or fix. A newer waiting run replaces an older one; each run looks at
+# all PRs, so nothing is lost.
+concurrency:
+  group: agent-branch-update
+  cancel-in-progress: false
+
+permissions:
+  contents: read        # GITHUB_TOKEN; pushes use the agent app token
+  pull-requests: write  # refusal comments
+
+env:
+  DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Keep trusted copies of the scripts (default branch)
+        run: |
+          T="$RUNNER_TEMP/trusted"; mkdir -p "$T"
+          cp -r .github/scripts "$T/"
+          echo "OPS=$T/scripts/agent_ops.py" >> "$GITHUB_ENV"
+
+      - name: Create agent app token
+        id: app
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.AGENT_APP_ID }}
+          private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
+
+      - name: Merge the default branch into open agent PRs
+        env:
+          APP_TOKEN: ${{ steps.app.outputs.token }}
+          AGENT_BOT_LOGIN: ${{ steps.app.outputs.app-slug }}[bot]
+        run: python3 "$OPS" update-branches --base "$DEFAULT_BRANCH"

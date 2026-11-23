@@ -174,6 +174,35 @@ up to `AGENT_MAX_PARALLEL` active tasks. A closed predecessor counts as done wha
 close reason; if you close one as "not planned", check its dependents. Text without issue
 numbers (e.g. "Merge des Agent-Setups") is not checked.
 
+## Automatic branch updates
+
+The ruleset requires a PR branch to be up to date, so after you merge one agent PR every
+other open one would need a click on **Update branch**. `agent-update.yml` does that for you.
+It runs after every push to the default branch and after every "Agent · Review" or
+"Agent · Fix" run ends (so PRs that were skipped while busy catch up). In
+`agent_ops.py update-branches` it selects every open PR with head `agent/issue-<n>` from this
+repository that is behind the default branch and has no `agent:in-progress` label
+(`select_branch_updates`), merges the default branch into it (`git merge --no-edit`, never a
+rebase or force-push) and pushes with the agent app token, so the required checks run on the
+new state.
+
+The update starts no review and is not a fix round: a conflict-free merge does not change the
+PR's own diff, and the CI gates run again anyway. It has its own concurrency group
+(`agent-branch-update`), so it never displaces a waiting review or fix. If the branch moves
+while the update runs (a fixer pushed), the update skips that PR; the next run retries.
+
+**When you have to step in.** If an update is refused, the PR gets one comment per default
+branch commit (marker `<!-- agent-branch-update base=<sha> -->`) with the reason:
+
+- *conflict*: resolve the merge conflict yourself, locally or in the web editor.
+- *workflow files*: the new default-branch commits change `.github/workflows/`, which the
+  app may not push (it lacks the `workflows` permission). Click **Update branch** yourself.
+- *other error*: click **Update branch**; if that fails too, open the run log. The run
+  fails in this case, so it shows up in the Actions tab.
+
+If GitHub cannot compare a PR with the default branch, or its branch cannot be fetched, that PR
+gets no comment, but the run fails (Actions tab). The other PRs are still updated.
+
 ## Quality gates in the agent loop
 
 The static gates are defined once in `.pre-commit-config.yaml` and run in three places:
