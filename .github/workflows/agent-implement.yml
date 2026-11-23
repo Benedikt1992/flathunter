@@ -121,9 +121,11 @@ jobs:
           AGENT_BOT_LOGIN: ${{ steps.bot.outputs.name }}
         run: |
           git checkout -b "${{ steps.gate.outputs.branch }}"
-          # trusted copy for the steps after the agent ran (it may change the working tree)
-          cp .github/scripts/agent_ops.py "$RUNNER_TEMP/agent_ops.py"
-          echo "OPS=$RUNNER_TEMP/agent_ops.py" >> "$GITHUB_ENV"
+          # trusted copy for the steps after the agent ran (it may change the working tree);
+          # the whole directory, because agent_ops.py imports agent_guard
+          T="$RUNNER_TEMP/trusted"; mkdir -p "$T"
+          cp -r .github/scripts "$T/"
+          echo "OPS=$T/scripts/agent_ops.py" >> "$GITHUB_ENV"
           mkdir -p .agent
           python3 .github/scripts/agent_ops.py issue-context "$ISSUE" .agent/context.md
           echo "schema=$(jq -c . .github/agents/schemas/implement.json)" >> "$GITHUB_OUTPUT"
@@ -140,6 +142,7 @@ jobs:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ steps.app.outputs.token }}
+          allowed_bots: github-actions
           bot_name: ${{ steps.bot.outputs.name }}
           bot_id: ${{ steps.bot.outputs.id }}
           prompt: |

@@ -101,6 +101,7 @@ jobs:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ github.token }}
+          allowed_bots: github-actions
           prompt: |
             Read `.github/agents/reviewer.md` and follow it exactly.
             Pull request #${{ env.PR }}: context in `.agent/context.md`, diff in `.agent/pr.diff`.
