@@ -172,13 +172,15 @@ jobs:
             echo "push=true" >> "$GITHUB_OUTPUT"
           else
             pointer=$(python3 "$OPS" questions-pointer issue "$RUNNER_TEMP/result.json" | sed -n 's/^pointer=//p')
+            run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            footer=$(python3 "$OPS" blocked-footer "$RUNNER_TEMP/result.json" "$run_url" | sed -n 's/^footer=//p')
             {
               echo "### 🤖 Agent could not complete this issue"
               echo
               echo "Status: \`$status\`, commits: $commits."
               if [ -n "$pointer" ]; then echo; echo "**Open questions:** $pointer"; fi
               echo
-              echo "Answer in a comment and re-add \`agent:ready\` to retry. [Run log]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)"
+              echo "$footer"
             } > "$RUNNER_TEMP/blocked.md"
             gh issue comment "$ISSUE" --body-file "$RUNNER_TEMP/blocked.md"
             python3 "$OPS" post-questions issue "$ISSUE" "$RUNNER_TEMP/result.json"
