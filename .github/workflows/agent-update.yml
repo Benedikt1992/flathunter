@@ -1,6 +1,7 @@
 # Agent · Update branches
-# Trigger: every push to the default branch, and the end of an agent run
-#          (review or fix), so PRs skipped because of `agent:in-progress` catch up.
+# Trigger: every push to the default branch, and a workflow_dispatch from the last step
+#          of every review and fix run, so PRs skipped because of `agent:in-progress`
+#          catch up (workflow_run does not fire for runs started with GITHUB_TOKEN).
 # Result:  open agent PRs that are behind get the default branch merged in (merge only,
 #          never rebase or force-push), pushed with the agent app token so CI runs.
 #          A refused update gets one comment per default-branch commit.
@@ -10,9 +11,7 @@ name: "Agent · Update branches"
 on:
   push:
     branches: [fork-main]
-  workflow_run:
-    workflows: ["Agent · Review", "Agent · Fix"]
-    types: [completed]
+  workflow_dispatch:
 
 # One global group, deliberately not agent-pr-<n>: an update must never displace a
 # waiting review or fix. A newer waiting run replaces an older one; each run looks at
