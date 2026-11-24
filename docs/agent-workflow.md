@@ -19,7 +19,8 @@ Issue ──(maintainer: agent:plan)──► Planner ──► plan comment ─
    Independent reviewer (github-actions[bot], read-only)    │
         ├─ changes requested ──► Fixer (mode=review) ───────┤  max AGENT_MAX_ROUNDS
         ▼ approved                                          │  automatic rounds,
-   PR ready for review · label needs-human · you requested  │  then agent:stuck
+   PR ready (agent app token, created after the review),    │  then agent:stuck
+   label needs-human · you requested                        │
         ▼                                                   │
    Maintainer review ──"Request changes"──► Fixer (mode=human, unlimited) ──► CI → review → you
         ▼ approve
@@ -120,6 +121,14 @@ Settings → Developer settings → GitHub Apps → New GitHub App:
 
 Pushes and PRs made with this app's token trigger CI (unlike the default `GITHUB_TOKEN`),
 and its identity is separate from the reviewer's.
+
+The review workflow also mints an app token, but only after the model step has finished and
+only when the reviewer approved. It is used for one thing: marking the PR ready for review
+(`gh pr ready`). The `GITHUB_TOKEN` cannot do this for a PR created by the app while the
+Actions setting in step 4 is off (`Resource not accessible by integration`), and that setting
+stays off. If marking the PR ready fails or the PR is still a draft afterwards, the workflow
+comments on the PR, writes the job summary, still sets `needs-human` and requests you, and
+fails the run (`agent:stuck`).
 
 ### 3. Secrets and variables
 Settings → Secrets and variables → Actions:
