@@ -178,8 +178,15 @@ numbers (e.g. "Merge des Agent-Setups") is not checked.
 
 The ruleset requires a PR branch to be up to date, so after you merge one agent PR every
 other open one would need a click on **Update branch**. `agent-update.yml` does that for you.
-It runs after every push to the default branch and after every "Agent · Review" or
-"Agent · Fix" run ends (so PRs that were skipped while busy catch up). In
+It runs after every push to the default branch and, via `workflow_dispatch`, at the end of
+every "Agent · Review" and "Agent · Fix" run: the last step of those workflows starts it
+with `gh workflow run`, after all label changes and also when the run failed (so PRs that
+were skipped while busy catch up). You can also start it by hand from the Actions tab.
+A `workflow_run` trigger would not work here: review and fix runs are themselves started
+with the `GITHUB_TOKEN`, and runs started that way create no events that start other
+workflows (only `workflow_dispatch` and `repository_dispatch` are exempt). If a job is
+killed by its timeout, the dispatch step may not run; the next push to the default branch
+catches up. In
 `agent_ops.py update-branches` it selects every open PR with head `agent/issue-<n>` from this
 repository that is behind the default branch and has no `agent:in-progress` label
 (`select_branch_updates`), merges the default branch into it (`git merge --no-edit`, never a
