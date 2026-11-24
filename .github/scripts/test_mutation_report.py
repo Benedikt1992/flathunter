@@ -90,24 +90,37 @@ def test_changed_scripts_excludes_tests_and_other_folders(monkeypatch):
             ".github/workflows/x.py",
             ".github/scripts/notes.md",
             "other/.github/scripts/y.py",
+            "setup.py",
         ],
     )
     assert mr.changed_scripts("base") == []
     assert mr.changed_sources("base") == []
 
 
-@given(st.lists(st.text(alphabet="abcdt_./", max_size=30), max_size=10))
+_DIRS = [".github/scripts/", "flathunter/", "", ".github/scripts/sub/", "other/.github/scripts/"]
+_NAMES = st.builds(
+    lambda prefix, stem, ext: prefix + stem + ext,
+    st.sampled_from(["test_", ""]),
+    st.text(alphabet="abc_", min_size=1, max_size=5),
+    st.sampled_from([".py", ".md"]),
+)
+
+
+@given(st.lists(st.builds(lambda d, n: d + n, st.sampled_from(_DIRS), _NAMES), max_size=10))
 def test_changed_scripts_property(files):
     with pytest.MonkeyPatch.context() as monkeypatch:
         _fake_git(monkeypatch, files)
         found = mr.changed_scripts("base")
-    for path in found:
-        assert path in files
-        name = path.removeprefix(".github/scripts/")
-        assert path.startswith(".github/scripts/")
-        assert path.endswith(".py")
-        assert "/" not in name
-        assert not name.startswith("test_")
+    scripts = ".github/scripts/"
+    expected = sorted(
+        p
+        for p in files
+        if p.startswith(scripts)
+        and p.endswith(".py")
+        and "/" not in p.removeprefix(scripts)
+        and not p.removeprefix(scripts).startswith("test_")
+    )
+    assert found == expected
 
 
 def test_mutant_location_with_prefix():
@@ -265,6 +278,32 @@ def test_main_both_groups_in_one_report(monkeypatch, tmp_path):
     assert "Surviving mutants in changed functions: 2" in report
     assert len(fake.mutmut_calls("run")) == 2
     assert len(summary["files"]) == 2
+
+
+def test_main_splits_timeout_budget_between_passes(monkeypatch, tmp_path):
+    seen: dict[str, int] = {}
+    monkeypatch.setattr(
+        mr,
+        "mutate_flathunter",
+        lambda _b, _p, t: (
+            seen.setdefault("flathunter", t) and mr.Group({}, [], [], [], timed_out=False)
+        ),
+    )
+    monkeypatch.setattr(
+        mr,
+        "mutate_scripts",
+        lambda _b, _p, t: (
+            seen.setdefault("scripts", t) and mr.Group({}, [], [], [], timed_out=False)
+        ),
+    )
+    monkeypatch.setattr(mr, "changed_sources", lambda _b: ["flathunter/x.py"])
+    monkeypatch.setattr(mr, "changed_scripts", lambda _b: [".github/scripts/a.py"])
+    monkeypatch.setattr(
+        sys, "argv", ["mr", "--base", "b", "--out", str(tmp_path), "--timeout", "1000"]
+    )
+    assert mr.main() == 0
+    assert seen["flathunter"] == 500
+    assert 0 < seen["scripts"] <= 500 + 500
 
 
 def test_render_reports_deselected_and_timeout():

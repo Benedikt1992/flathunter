@@ -960,7 +960,11 @@ def mutation_report(sha: str) -> str:
                 return "# Evidence: mutation testing of the changed modules\n\n" + report.read_text(
                     encoding="utf-8"
                 )
-    return "# Evidence: mutation testing\n\n_No mutation report (no changed modules under flathunter/)._"
+    return (
+        "# Evidence: mutation testing\n\n"
+        "_No mutation report (no changed modules under flathunter/ "
+        "or scripts under .github/scripts/)._"
+    )
 
 
 def cmd_findings_context(args) -> int:

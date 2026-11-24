@@ -30,6 +30,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from collections import Counter
 from contextlib import contextmanager
 from functools import partial
@@ -344,10 +345,14 @@ def main() -> int:
     summary: dict[str, object] = {}
     sources, scripts = changed_sources(args.base), changed_scripts(args.base)
     groups: list[Group] = []
+    # One time budget for both passes, so the job limit holds and the report is written.
+    started = time.monotonic()
+    first_budget = args.timeout // 2 if sources and scripts else args.timeout
     if sources:
-        groups.append(mutate_flathunter(args.base, sources, args.timeout))
+        groups.append(mutate_flathunter(args.base, sources, first_budget))
     if scripts:
-        groups.append(mutate_scripts(args.base, scripts, args.timeout))
+        remaining = max(1, args.timeout - int(time.monotonic() - started))
+        groups.append(mutate_scripts(args.base, scripts, remaining))
     if not groups:
         lines.append(
             "No changed modules under `flathunter/` or scripts under `.github/scripts/`; "
