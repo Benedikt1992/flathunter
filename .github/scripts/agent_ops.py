@@ -1054,13 +1054,26 @@ def human_feedback(
     return body, [view for view in views if view is not None]
 
 
+def thread_location(path: str, line: int | None) -> str:
+    """Format a review thread position: `path:line`, or just `path` without a line.
+
+    Args:
+        path: File path of the thread.
+        line: Line number, or None for comments on a whole file.
+
+    Returns:
+        The position text for the fixer's context.
+    """
+    return path if line is None else f"{path}:{line}"
+
+
 def render_question_threads(threads: list[dict]) -> str:
     """Context lines for question threads (empty string if there are none)."""
     parts: list[str] = []
     for thread in threads:
         if "question_id" not in thread:
             continue
-        where = f"`{thread['path']}:{thread['line']}`"
+        where = f"`{thread_location(thread['path'], thread.get('line'))}`"
         target = (
             f"resolved, do not reply; {where}"
             if thread.get("resolved")
@@ -1120,7 +1133,7 @@ def cmd_human_context(args) -> int:
     for thread in plain:
         parts.append(
             f"### Thread `reply_to_id={thread['reply_to_id']}` — "
-            f"`{thread['path']}:{thread['line']}`"
+            f"`{thread_location(thread['path'], thread.get('line'))}`"
         )
         for comment in thread["conversation"]:
             parts += [f"**{comment['author']}:** {comment['body']}", ""]
