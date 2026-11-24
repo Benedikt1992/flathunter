@@ -1,9 +1,11 @@
 """Tests for the mutation report helpers (run with `python -m pytest .github/scripts`)."""
 
 import json
+import re
 import subprocess
 import sys
 from collections import Counter
+from pathlib import Path
 
 import mutation_report as mr
 import pytest
@@ -166,9 +168,12 @@ class FakeMutmut:
 
     def __init__(self, files, results):
         self.files, self.results, self.calls = files, results, []
+        self.sections = []  # pyproject.toml of the directory at each `mutmut run`
 
     def __call__(self, cmd, cwd=mr.ROOT, **_kwargs):
         self.calls.append((cmd, cwd))
+        if cmd[:2] == ["mutmut", "run"]:
+            self.sections.append((Path(cwd) / "pyproject.toml").read_text(encoding="utf-8"))
         out = ""
         if cmd[:2] == ["git", "diff"]:
             out = "\n".join(self.files) if "--name-only" in cmd else "@@ -1 +1,2 @@"
@@ -213,6 +218,21 @@ def test_main_scripts_only_reports_agent_ops(monkeypatch, tmp_path):
     assert cwds[0] != mr.ROOT
     assert set(fake.mutmut_calls("show")) == set(cwds)
     assert (tmp_path / "pyproject.toml").read_text(encoding="utf-8") == "[tool.x]\n"
+    # the mutated script is not also copied unmutated, its tests are
+    (section,) = fake.sections
+    assert 'source_paths = ["agent_ops.py"]' in section
+    assert 'pytest_add_cli_args_test_selection = ["."]' in section
+    match = re.search(r"^also_copy = (.*)$", section, re.MULTILINE)
+    assert match
+    copied = json.loads(match.group(1))
+    assert "agent_ops.py" not in copied
+    assert "test_mutation_report.py" in copied
+
+
+def test_mutmut_section_keeps_explicit_empty_selection():
+    section = mr.mutmut_section(["a.py"], [], copy=[], selection=[])
+    assert "pytest_add_cli_args_test_selection = []" in section
+    assert "also_copy = []" in section
 
 
 def test_main_only_script_tests_changed_mutates_nothing(monkeypatch, tmp_path):

@@ -150,7 +150,7 @@ def mutmut_section(
         "\n[tool.mutmut]\n"
         f"source_paths = {json.dumps(paths)}\n"
         f"also_copy = {json.dumps(also_copy() if copy is None else copy)}\n"
-        f"pytest_add_cli_args_test_selection = {json.dumps(selection or ['test/'])}\n"
+        f"pytest_add_cli_args_test_selection = {json.dumps(['test/'] if selection is None else selection)}\n"
         f"pytest_add_cli_args = {json.dumps(args)}\n"
     )
 
