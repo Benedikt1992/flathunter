@@ -322,12 +322,10 @@ def mutate_scripts(base: str, paths: list[str], timeout: int) -> Group:
     touched = _touched(base, paths)
     with scripts_workspace() as (work, write):
         deselect = failing_tests(work, (".",))
-        make_section = partial(
-            mutmut_section,
-            copy=sorted(p.name for p in work.glob("*.py")),
-            selection=["."],
-        )
         names = [Path(path).name for path in paths]
+        # the mutated files must not also be copied unmutated
+        copy = sorted(p.name for p in work.glob("*.py") if p.name not in names)
+        make_section = partial(mutmut_section, copy=copy, selection=["."])
         done = run_mutmut(names, deselect, timeout, write, work, make_section)
         return _collect(touched, deselect, work, SCRIPTS_PREFIX, timed_out=not done)
 
