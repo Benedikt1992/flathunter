@@ -242,3 +242,8 @@ jobs:
             fi
           } > "$RUNNER_TEMP/failure.md"
           gh pr comment "$PR" --body-file "$RUNNER_TEMP/failure.md"
+
+      - name: Start branch update (default branch)
+        if: always()
+        continue-on-error: true
+        run: gh workflow run agent-update.yml --ref "$DEFAULT_BRANCH" || { echo "::warning::Could not start agent-update.yml"; exit 1; }
