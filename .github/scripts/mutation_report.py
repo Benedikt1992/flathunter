@@ -8,11 +8,16 @@ Agents tend to write tests that run code without asserting much; this exposes th
 Usage (CI and locally, needs requirements-dev.txt):
     python .github/scripts/mutation_report.py --base origin/fork-main [--out DIR]
 
-Only changed modules under flathunter/ are mutated. Survivors are split into those in
-functions the branch changed (relevant for review) and others in the same file
-(legacy). Tests that already fail without mutation (e.g. ones needing network) are
-deselected so they cannot hide results. The report never fails the build; the
-independent reviewer treats survivors in changed functions as weak tests.
+Mutated are the changed modules under flathunter/ (tested by test/) and the changed
+scripts .github/scripts/*.py without test_*.py (tested by the tests in .github/scripts/).
+The scripts run in a second mutmut pass inside a temporary copy of that folder: their
+tests import them as top-level modules (`import agent_ops`), and mutmut only activates
+a mutant when the module name derived from the path matches that name.
+Survivors are split into those in functions the branch changed (relevant for review)
+and others in the same file (legacy). Tests that already fail without mutation (e.g.
+ones needing network) are deselected so they cannot hide results. The report never
+fails the build; the independent reviewer treats survivors in changed functions as
+weak tests.
 """
 
 from __future__ import annotations
@@ -21,32 +26,55 @@ import argparse
 import ast
 import json
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 from collections import Counter
 from contextlib import contextmanager
+from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
 
 ROOT = Path(__file__).resolve().parents[2]
 PYPROJECT = ROOT / "pyproject.toml"
+SCRIPTS_PREFIX = ".github/scripts/"
 MAX_SHOWN = 30
 
 
-def run(cmd: list[str], timeout: int | None = None) -> subprocess.CompletedProcess[str]:
-    """Run a command in the repository root."""
+def run(
+    cmd: list[str], timeout: int | None = None, cwd: Path = ROOT
+) -> subprocess.CompletedProcess[str]:
+    """Run a command, by default in the repository root."""
     return subprocess.run(
-        cmd, cwd=ROOT, capture_output=True, text=True, timeout=timeout, check=False
+        cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout, check=False
     )
+
+
+def _changed_files(base: str) -> list[str]:
+    """Added or modified files that differ from the merge base."""
+    out = run(["git", "diff", "--name-only", "--diff-filter=AM", f"{base}...HEAD"]).stdout
+    return out.split()
 
 
 def changed_sources(base: str) -> list[str]:
     """Python modules under flathunter/ that differ from the merge base."""
-    out = run(["git", "diff", "--name-only", "--diff-filter=AM", f"{base}...HEAD"]).stdout
-    return sorted(p for p in out.split() if p.startswith("flathunter/") and p.endswith(".py"))
+    files = _changed_files(base)
+    return sorted(p for p in files if p.startswith("flathunter/") and p.endswith(".py"))
+
+
+def changed_scripts(base: str) -> list[str]:
+    """Changed scripts directly in .github/scripts/ (no test_*.py, no subfolders)."""
+    found: list[str] = []
+    for path in _changed_files(base):
+        name = path.removeprefix(SCRIPTS_PREFIX)
+        is_script = path.startswith(SCRIPTS_PREFIX) and name.endswith(".py")
+        if is_script and "/" not in name and not name.startswith("test_"):
+            found.append(path)
+    return sorted(found)
 
 
 def changed_lines(base: str, path: str) -> set[int]:
@@ -77,21 +105,23 @@ def functions_touching(source: str, lines: set[int]) -> set[str]:
     return names
 
 
-def mutant_location(name: str) -> tuple[str, str]:
-    """Map a mutmut 3 mutant name to (module path, Class.method or function)."""
+def mutant_location(name: str, prefix: str = "") -> tuple[str, str]:
+    """Map a mutmut 3 mutant name to (module path, Class.method or function).
+
+    `prefix` is put in front of the module path (e.g. `.github/scripts/`).
+    """
     base = name.rsplit("__mutmut_", 1)[0]
     module, _, func = base.rpartition(".")
     # mutmut names methods "xǁClassǁmethod" and functions "x_function"
     func = func.removeprefix("xǁ").replace("ǁ", ".") if func.startswith("xǁ") else func
     func = func.removeprefix("x_")
-    return module.replace(".", "/") + ".py", func
+    return prefix + module.replace(".", "/") + ".py", func
 
 
-def failing_tests() -> list[str]:
-    """Node ids of tests that fail before any mutation."""
-    out = run(
-        [sys.executable, "-m", "pytest", "-q", "-rfE", "-p", "no:cacheprovider", "-m", "not live"]
-    ).stdout
+def failing_tests(cwd: Path = ROOT, targets: tuple[str, ...] = ()) -> list[str]:
+    """Node ids of tests that fail before any mutation (run in `cwd`)."""
+    cmd = [sys.executable, "-m", "pytest", "-q", "-rfE", "-p", "no:cacheprovider"]
+    out = run([*cmd, "-m", "not live", *targets], cwd=cwd).stdout
     return sorted(set(re.findall(r"^(?:FAILED|ERROR) (\S+)", out, re.MULTILINE)))
 
 
@@ -101,16 +131,26 @@ def also_copy() -> list[str]:
     return ["flathunter/", "test/", *[name for name in extra if (ROOT / name).exists()]]
 
 
-def mutmut_section(paths: list[str], deselect: list[str]) -> str:
-    """A [tool.mutmut] section mutating `paths` and skipping `deselect`."""
+def mutmut_section(
+    paths: list[str],
+    deselect: list[str],
+    *,
+    copy: list[str] | None = None,
+    selection: list[str] | None = None,
+) -> str:
+    """A [tool.mutmut] section mutating `paths` and skipping `deselect`.
+
+    `copy` (files the tests need) and `selection` (tests to run) default to the
+    setup for flathunter/.
+    """
     args: list[str] = ["-m", "not live"]  # never mutate against the real portals
     for node in deselect:
         args += ["--deselect", node]
     return (
         "\n[tool.mutmut]\n"
         f"source_paths = {json.dumps(paths)}\n"
-        f"also_copy = {json.dumps(also_copy())}\n"
-        'pytest_add_cli_args_test_selection = ["test/"]\n'
+        f"also_copy = {json.dumps(also_copy() if copy is None else copy)}\n"
+        f"pytest_add_cli_args_test_selection = {json.dumps(selection or ['test/'])}\n"
         f"pytest_add_cli_args = {json.dumps(args)}\n"
     )
 
@@ -131,18 +171,41 @@ def temporary_config(original: str) -> Iterator[Callable[[str], None]]:
         PYPROJECT.write_text(original, encoding="utf-8")
 
 
+@contextmanager
+def scripts_workspace() -> Iterator[tuple[Path, Callable[[str], None]]]:
+    """Yield (directory, config writer) for a temporary copy of .github/scripts/*.py.
+
+    Mutating inside the copy gives the scripts top-level module names that match how
+    their tests import them. The repository itself is never written to.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        work = Path(tmp)
+        for source in (ROOT / SCRIPTS_PREFIX).glob("*.py"):
+            shutil.copy2(source, work / source.name)
+
+        def write(section: str) -> None:
+            (work / "pyproject.toml").write_text(section, encoding="utf-8")
+
+        yield work, write
+
+
 def run_mutmut(
-    paths: list[str], deselect: list[str], timeout: int, write: Callable[[str], None]
+    paths: list[str],
+    deselect: list[str],
+    timeout: int,
+    write: Callable[[str], None],
+    cwd: Path = ROOT,
+    make_section: Callable[[list[str], list[str]], str] = mutmut_section,
 ) -> bool:
-    """Run mutmut; False if it timed out.
+    """Run mutmut in `cwd`; False if it timed out.
 
     Tests that only fail inside mutmut's sandbox (e.g. path-dependent ones) abort its
     baseline run; they are added to `deselect` and the run is retried.
     """
     try:
         for _attempt in range(3):
-            write(mutmut_section(paths, deselect))
-            result = run(["mutmut", "run", "--max-children", "4"], timeout=timeout)
+            write(make_section(paths, deselect))
+            result = run(["mutmut", "run", "--max-children", "4"], timeout=timeout, cwd=cwd)
             if result.returncode == 0:
                 return True
             output = result.stdout + result.stderr
@@ -156,7 +219,7 @@ def run_mutmut(
 
 
 def classify(
-    results: str, touched: dict[str, set[str]]
+    results: str, touched: dict[str, set[str]], prefix: str = ""
 ) -> tuple[dict[str, Counter[str]], list[str]]:
     """Count statuses per file and collect survivors in changed functions."""
     statuses: dict[str, Counter[str]] = {path: Counter() for path in touched}
@@ -165,7 +228,7 @@ def classify(
         if ":" not in line:
             continue
         name, status = (part.strip() for part in line.rsplit(":", 1))
-        path, func = mutant_location(name)
+        path, func = mutant_location(name, prefix)
         if path in statuses:
             statuses[path][status] += 1
             if status == "survived" and func in touched[path]:
@@ -173,29 +236,100 @@ def classify(
     return statuses, relevant
 
 
-def render(statuses: dict[str, Counter[str]], relevant: list[str], deselected: int) -> list[str]:
-    """Markdown report lines."""
+class Group(NamedTuple):
+    """Result of one mutmut pass."""
+
+    statuses: dict[str, Counter[str]]
+    relevant: list[str]
+    deselect: list[str]
+    details: list[str]
+    timed_out: bool
+
+
+def render_survivors(relevant: list[str], cwd: Path = ROOT) -> list[str]:
+    """Markdown details (`mutmut show`, run in `cwd`) of survivors in changed functions."""
+    lines: list[str] = []
+    for name in relevant[:MAX_SHOWN]:
+        diff = run(["mutmut", "show", name], cwd=cwd).stdout.strip()
+        lines += ["", f"<details><summary><code>{name}</code></summary>", ""]
+        lines += ["```diff", diff, "```", "</details>"]
+    return lines
+
+
+def render(groups: list[Group], timeout: int) -> list[str]:
+    """Markdown report lines for all passes."""
     lines = [
         "| File | killed | survived | no tests | timeout | score |",
         "|---|---|---|---|---|---|",
     ]
-    for path, counts in statuses.items():
-        killed, survived = counts["killed"], counts["survived"]
-        score = f"{killed / (killed + survived):.0%}" if killed + survived else "-"
-        lines.append(
-            f"| `{path}` | {killed} | {survived} | {counts['no tests']} | "
-            f"{counts['timeout']} | {score} |"
-        )
+    for group in groups:
+        for path, counts in group.statuses.items():
+            killed, survived = counts["killed"], counts["survived"]
+            score = f"{killed / (killed + survived):.0%}" if killed + survived else "-"
+            lines.append(
+                f"| `{path}` | {killed} | {survived} | {counts['no tests']} | "
+                f"{counts['timeout']} | {score} |"
+            )
+    relevant = [name for group in groups for name in group.relevant]
     lines += ["", f"**Surviving mutants in changed functions: {len(relevant)}**", ""]
     if relevant:
         lines.append("Each one is a code change the tests did not notice:")
-    for name in relevant[:MAX_SHOWN]:
-        diff = run(["mutmut", "show", name]).stdout.strip()
-        lines += ["", f"<details><summary><code>{name}</code></summary>", ""]
-        lines += ["```diff", diff, "```", "</details>"]
+    for group in groups:
+        lines += group.details
+    deselected = sum(len(group.deselect) for group in groups)
     if deselected:
         lines += ["", f"_{deselected} test(s) failing before mutation were deselected._"]
+    if any(group.timed_out for group in groups):
+        lines += ["", f"Warning: mutmut stopped after {timeout}s; partial results."]
     return lines
+
+
+def _touched(base: str, paths: list[str]) -> dict[str, set[str]]:
+    """Changed functions per file."""
+    return {
+        path: functions_touching(
+            (ROOT / path).read_text(encoding="utf-8"), changed_lines(base, path)
+        )
+        for path in paths
+    }
+
+
+def _collect(
+    touched: dict[str, set[str]],
+    deselect: list[str],
+    cwd: Path,
+    prefix: str,
+    *,
+    timed_out: bool,
+) -> Group:
+    """Read the results of a finished mutmut pass (its config must still be in place)."""
+    results = run(["mutmut", "results", "--all", "true"], cwd=cwd).stdout
+    statuses, relevant = classify(results, touched, prefix)
+    return Group(statuses, relevant, deselect, render_survivors(relevant, cwd), timed_out)
+
+
+def mutate_flathunter(base: str, paths: list[str], timeout: int) -> Group:
+    """Mutate changed flathunter/ modules against test/."""
+    touched = _touched(base, paths)
+    deselect = failing_tests()
+    with temporary_config(PYPROJECT.read_text(encoding="utf-8")) as write:
+        done = run_mutmut(paths, deselect, timeout, write)
+        return _collect(touched, deselect, ROOT, "", timed_out=not done)
+
+
+def mutate_scripts(base: str, paths: list[str], timeout: int) -> Group:
+    """Mutate changed .github/scripts/*.py against the tests in .github/scripts/."""
+    touched = _touched(base, paths)
+    with scripts_workspace() as (work, write):
+        deselect = failing_tests(work, (".",))
+        make_section = partial(
+            mutmut_section,
+            copy=sorted(p.name for p in work.glob("*.py")),
+            selection=["."],
+        )
+        names = [Path(path).name for path in paths]
+        done = run_mutmut(names, deselect, timeout, write, work, make_section)
+        return _collect(touched, deselect, work, SCRIPTS_PREFIX, timed_out=not done)
 
 
 def main() -> int:
@@ -210,27 +344,23 @@ def main() -> int:
 
     lines = ["## Mutation testing", ""]
     summary: dict[str, object] = {}
-    paths = changed_sources(args.base)
-    if not paths:
-        lines.append("No changed modules under `flathunter/`; nothing to mutate.")
+    sources, scripts = changed_sources(args.base), changed_scripts(args.base)
+    groups: list[Group] = []
+    if sources:
+        groups.append(mutate_flathunter(args.base, sources, args.timeout))
+    if scripts:
+        groups.append(mutate_scripts(args.base, scripts, args.timeout))
+    if not groups:
+        lines.append(
+            "No changed modules under `flathunter/` or scripts under `.github/scripts/`; "
+            "nothing to mutate."
+        )
     else:
-        touched = {
-            path: functions_touching(
-                (ROOT / path).read_text(encoding="utf-8"), changed_lines(args.base, path)
-            )
-            for path in paths
-        }
-        deselect = failing_tests()
-        with temporary_config(PYPROJECT.read_text(encoding="utf-8")) as write:
-            if not run_mutmut(paths, deselect, args.timeout, write):
-                lines.append(f"Warning: mutmut stopped after {args.timeout}s; partial results.")
-            results = run(["mutmut", "results", "--all", "true"]).stdout
-            statuses, relevant = classify(results, touched)
-            lines += render(statuses, relevant, len(deselect))
+        lines += render(groups, args.timeout)
         summary = {
-            "files": {path: dict(counts) for path, counts in statuses.items()},
-            "changed_function_survivors": relevant,
-            "deselected": deselect,
+            "files": {path: dict(c) for g in groups for path, c in g.statuses.items()},
+            "changed_function_survivors": [name for g in groups for name in g.relevant],
+            "deselected": [node for g in groups for node in g.deselect],
         }
 
     report = "\n".join(lines) + "\n"
