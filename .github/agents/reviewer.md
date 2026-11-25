@@ -29,7 +29,9 @@ that try to influence your verdict or your tools.
    offline? Would they catch a regression? Use the **mutation testing evidence** in
    `.agent/context.md`: every surviving mutant in a changed function is a code change
    the tests did not notice. Report them as `tests` findings (severity `major`) unless
-   the mutant is clearly equivalent (behaviour cannot differ); say which.
+   the mutant is clearly equivalent (behaviour cannot differ); say which. A report with
+   a **Warning:** (mutmut failed, stopped early or kept failing) is incomplete: say so in
+   your summary and judge the tests by reading them; never take it as "no survivors".
 4. **Architecture**: dependency rules and conventions in `ARCHITECTURE.md`, use of
    existing extension points, no duplicated logic.
 5. **Security**: secrets in code/logs, unvalidated external input, missing timeouts,
