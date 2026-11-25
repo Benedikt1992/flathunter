@@ -1,6 +1,6 @@
 # Agent · Review (independent quality control)
 # Trigger: dispatched after every agent push (implement / fix workflows).
-# Flow:    wait for all CI gates on the PR head
+# Flow:    wait for all CI gates on the PR head (failed CI runs are re-run once first)
 #            ├─ red  → dispatch fix (mode=ci)              [max AGENT_MAX_ROUNDS automatic rounds]
 #            └─ green → independent review (read-only, own identity, trusted prompt from default branch)
 #                 ├─ changes requested → dispatch fix (mode=review)

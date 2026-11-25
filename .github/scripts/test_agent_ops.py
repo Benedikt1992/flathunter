@@ -1014,3 +1014,93 @@ def test_mutation_report_returns_downloaded_report(monkeypatch):
 def test_fix_round_action_property(outcome, status, commits):
     _, action = ops.fix_round_decision(outcome, {"status": status}, commits)
     assert (action == "rereview") == (commits > 0)
+
+
+def _check(name, bucket, run_id=None):
+    link = f"https://github.com/o/r/actions/runs/{run_id}/job/9" if run_id else "https://ci.example"
+    return {"name": name, "bucket": bucket, "workflow": "CI", "link": link}
+
+
+def test_failed_run_ids_takes_failed_and_cancelled_actions_runs():
+    checks = [
+        _check("a", "fail", 7),
+        _check("b", "cancel", 5),
+        _check("c", "fail", 7),
+        _check("d", "pass", 3),
+        _check("e", "fail"),  # not a GitHub Actions run
+    ]
+    assert ops.failed_run_ids(checks) == ["5", "7"]
+    assert ops.failed_run_ids([{"bucket": "fail", "link": None}]) == []
+
+
+def test_retry_first_attempts_reruns_each_failed_run_once(monkeypatch):
+    attempts = {"5": 1, "7": 2}
+    monkeypatch.setenv("GITHUB_REPOSITORY", "o/r")
+    monkeypatch.setattr(
+        ops, "gh_json", lambda path: {"run_attempt": attempts[path.rsplit("/", 1)[1]]}
+    )
+    calls = []
+    monkeypatch.setattr(ops, "gh", lambda *a, **k: calls.append((a, k)) or "")
+    tried: set[str] = set()
+    # 7 was already re-run (attempt 2): its failure counts
+    assert ops.retry_first_attempts(["5", "7"], tried) == ["5"]
+    assert calls == [(("run", "rerun", "5", "--failed"), {"check": False})]
+    assert tried == {"5", "7"}
+    # a re-run that did not start (still attempt 1) is not requested again
+    assert ops.retry_first_attempts(["5"], tried) == []
+    assert len(calls) == 1
+
+
+class _Clock:
+    def __init__(self):
+        self.now = 0.0
+
+    def time(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.now += seconds
+
+
+def _wait_checks(monkeypatch, polls, attempt):
+    """Run cmd_wait_checks against `polls` (one checks list per poll, the last repeats)."""
+    clock, outputs, reruns = _Clock(), {}, []
+    monkeypatch.setattr(ops, "time", clock)
+    monkeypatch.setenv("GITHUB_REPOSITORY", "o/r")
+
+    def gh(*args, **_kw):
+        if args[:2] == ("run", "rerun"):
+            reruns.append((clock.now, args[2]))
+            return ""
+        assert args == ("pr", "checks", "68", "--json", "name,bucket,workflow,link")
+        return json.dumps(polls.pop(0) if len(polls) > 1 else polls[0])
+
+    monkeypatch.setattr(ops, "gh", gh)
+    monkeypatch.setattr(ops, "gh_json", lambda _path: {"run_attempt": attempt})
+    monkeypatch.setattr(ops, "set_output", outputs.__setitem__)
+    assert ops.cmd_wait_checks(Namespace(pr=68, timeout=45)) == 0
+    return outputs, reruns, clock.now
+
+
+def test_wait_checks_reruns_a_failed_run_once_and_waits_for_it(monkeypatch):
+    failed = [_check("gitleaks", "fail", 5), _check("tests", "pass", 6)]
+    polls = (
+        [failed] * 4 + [[_check("gitleaks", "pending", 5)]] * 3 + [[_check("gitleaks", "pass", 5)]]
+    )
+    outputs, reruns, now = _wait_checks(monkeypatch, polls, attempt=1)
+    assert outputs == {"result": "pass", "failed": ""}
+    assert reruns == [(90.0, "5")]  # once the failure had settled (> 60 s)
+    assert now > 90.0 + 60
+
+
+def test_wait_checks_reports_a_failure_that_was_already_retried(monkeypatch):
+    outputs, reruns, now = _wait_checks(monkeypatch, [[_check("gitleaks", "fail", 5)]], attempt=2)
+    assert outputs == {"result": "fail", "failed": "CI/gitleaks"}
+    assert reruns == []
+    assert now == 90.0
+
+
+def test_wait_checks_times_out_while_checks_stay_pending(monkeypatch):
+    outputs, _reruns, now = _wait_checks(monkeypatch, [[_check("t", "pending", 5)]], attempt=1)
+    assert outputs == {"result": "timeout"}
+    assert now == 45 * 60
