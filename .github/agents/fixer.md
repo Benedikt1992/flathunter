@@ -24,9 +24,13 @@ permissions or other repositories.
 4. Run the gates (`python -m pytest -q`, `prek run --all-files`). New code must be
    clean; never grow a baseline. If the review mentions surviving mutants, add tests
    and re-check with `python .github/scripts/mutation_report.py --base "$AGENT_BASE_REF"`.
-5. Commit each addressed point separately where practical, message
+5. Commit each addressed point as soon as its tests pass, message
    `Address review: <what> (#<issue>)`. New commits only; never amend, rebase or force-push.
    Do not push; the workflow pushes. Never commit files under `.agent/`.
+   Anything not committed when your session ends is discarded, also for a `partial`
+   result: commit finished points before you investigate the rest. Stage files by
+   name (`git add <files>`), and delete scratch or debug files you created (`rm`)
+   instead of leaving them in the working tree.
 
 ## Questions
 `open_questions` is a list of objects, not strings. Each entry is posted as its own
