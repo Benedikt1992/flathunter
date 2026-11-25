@@ -283,6 +283,16 @@ def test_main_scripts_only_reports_agent_ops(monkeypatch, tmp_path):
     assert "test_mutation_report.py" in copied
 
 
+def test_mutmut_section_is_a_complete_table():
+    assert mr.mutmut_section(["a.py"], ["t::a"], copy=["b.py"], selection=["."]) == (
+        "\n[tool.mutmut]\n"
+        'source_paths = ["a.py"]\n'
+        'also_copy = ["b.py"]\n'
+        'pytest_add_cli_args_test_selection = ["."]\n'
+        'pytest_add_cli_args = ["-m", "not live", "--deselect", "t::a"]\n'
+    )
+
+
 def test_mutmut_section_keeps_explicit_empty_selection():
     section = mr.mutmut_section(["a.py"], [], copy=[], selection=[])
     assert "pytest_add_cli_args_test_selection = []" in section
@@ -433,7 +443,7 @@ def test_run_mutmut_reports_a_timeout(monkeypatch, tmp_path):
 
 
 def test_last_line_skips_blank_lines_and_trims():
-    assert mr.last_line("first\n  second  \n\n   \n") == "`second`"
+    assert mr.last_line("first\nsecond\n  third  \n\n   \n") == "`third`"
     assert mr.last_line("\n \n") == "no output"
 
 
