@@ -119,7 +119,7 @@ def mutant_location(name: str, prefix: str = "") -> tuple[str, str]:
     return prefix + module.replace(".", "/") + ".py", func
 
 
-def failing_tests(cwd: Path = ROOT, targets: tuple[str, ...] = ()) -> list[str]:
+def failing_tests(cwd: Path, targets: tuple[str, ...] = ()) -> list[str]:
     """Node ids of tests that fail before any mutation (run in `cwd`)."""
     cmd = [sys.executable, "-m", "pytest", "-q", "-rfE", "-p", "no:cacheprovider"]
     out = run([*cmd, "-m", "not live", *targets], cwd=cwd).stdout
@@ -177,12 +177,18 @@ def scripts_workspace() -> Iterator[tuple[Path, Callable[[str], None]]]:
     """Yield (directory, config writer) for a temporary copy of .github/scripts/*.py.
 
     Mutating inside the copy gives the scripts top-level module names that match how
-    their tests import them. The repository itself is never written to.
+    their tests import them. Tests that read `../workflows` relative to their file find
+    a copy of .github/workflows both in the baseline run (tests in the copy) and in
+    mutmut's runs (tests in its `mutants/` folder inside the copy). The repository
+    itself is never written to.
     """
     with tempfile.TemporaryDirectory() as tmp:
-        work = Path(tmp)
+        work = Path(tmp) / "scripts"
+        work.mkdir()
         for source in (ROOT / SCRIPTS_PREFIX).glob("*.py"):
             shutil.copy2(source, work / source.name)
+        for workflows in (work.parent / "workflows", work / "workflows"):
+            shutil.copytree(ROOT / ".github" / "workflows", workflows)
 
         def write(section: str) -> None:
             (work / "pyproject.toml").write_text(section, encoding="utf-8")
@@ -195,7 +201,7 @@ def run_mutmut(
     deselect: list[str],
     timeout: int,
     write: Callable[[str], None],
-    cwd: Path = ROOT,
+    cwd: Path,
     make_section: Callable[[list[str], list[str]], str] = mutmut_section,
 ) -> bool:
     """Run mutmut in `cwd`; False if it timed out.
@@ -247,7 +253,7 @@ class Group(NamedTuple):
     timed_out: bool
 
 
-def render_survivors(relevant: list[str], cwd: Path = ROOT) -> list[str]:
+def render_survivors(relevant: list[str], cwd: Path) -> list[str]:
     """Markdown details (`mutmut show`, run in `cwd`) of survivors in changed functions."""
     lines: list[str] = []
     for name in relevant[:MAX_SHOWN]:
@@ -312,9 +318,9 @@ def _collect(
 def mutate_flathunter(base: str, paths: list[str], timeout: int) -> Group:
     """Mutate changed flathunter/ modules against test/."""
     touched = _touched(base, paths)
-    deselect = failing_tests()
+    deselect = failing_tests(ROOT)
     with temporary_config(PYPROJECT.read_text(encoding="utf-8")) as write:
-        done = run_mutmut(paths, deselect, timeout, write)
+        done = run_mutmut(paths, deselect, timeout, write, ROOT)
         return _collect(touched, deselect, ROOT, "", timed_out=not done)
 
 

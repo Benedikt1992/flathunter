@@ -166,14 +166,54 @@ def test_mutmut_section_defaults_for_flathunter():
     assert '"flathunter/"' in section
 
 
-def test_scripts_workspace_copies_scripts_and_cleans_up():
+REPO_FILES = {
+    ".github/scripts/agent_ops.py": "def f():\n    return 1\n",
+    ".github/scripts/mutation_report.py": "ROOT = None\n",
+    ".github/scripts/test_mutation_report.py": "def test_x():\n    pass\n",
+    ".github/scripts/notes.md": "not a script\n",
+    ".github/scripts/sub/helper.py": "def g():\n    return 3\n",
+    ".github/workflows/agent-fix.yml": "name: fix\n",
+    "flathunter/filter.py": "def f():\n    return 2\n",
+    "pyproject.toml": "[tool.x]\n",
+}
+
+
+@pytest.fixture
+def fake_root(tmp_path, monkeypatch):
+    """A minimal repository (REPO_FILES) as `mr.ROOT`, so tests never read the real one.
+
+    The tests also run inside mutmut's copy of this folder, where the real files are
+    not at `parents[2]` of the script.
+    """
+    root = tmp_path / "repo"
+    for name, text in REPO_FILES.items():
+        (root / name).parent.mkdir(parents=True, exist_ok=True)
+        (root / name).write_text(text, encoding="utf-8")
+    monkeypatch.setattr(mr, "ROOT", root)
+    monkeypatch.setattr(mr, "PYPROJECT", root / "pyproject.toml")
+    return root
+
+
+def test_scripts_workspace_copies_scripts_and_workflows(fake_root):
     with mr.scripts_workspace() as (work, write):
-        assert (work / "mutation_report.py").exists()
-        assert (work / "test_mutation_report.py").exists()
+        # only the scripts directly in .github/scripts/, unchanged
+        assert sorted(p.name for p in work.iterdir() if p.is_file()) == [
+            "agent_ops.py",
+            "mutation_report.py",
+            "test_mutation_report.py",
+        ]
+        assert (work / "agent_ops.py").read_text(encoding="utf-8") == "def f():\n    return 1\n"
+        # tests read ../workflows: from the copy (baseline) and from mutmut's mutants/
+        for workflows in (work.parent / "workflows", work / "workflows"):
+            assert (workflows / "agent-fix.yml").read_text(encoding="utf-8") == "name: fix\n"
         write("[tool.mutmut]\n")
         assert (work / "pyproject.toml").read_text(encoding="utf-8") == "[tool.mutmut]\n"
-        assert work != mr.ROOT
-    assert not work.exists()
+        assert not work.is_relative_to(fake_root)
+    assert not work.parent.exists()
+    # the repository itself is never written to
+    assert sorted(str(p.relative_to(fake_root)) for p in fake_root.rglob("*") if p.is_file()) == (
+        sorted(REPO_FILES)
+    )
 
 
 class FakeMutmut:
@@ -201,10 +241,9 @@ class FakeMutmut:
 
 
 def _main(monkeypatch, tmp_path, files, results):
+    """Run `main()` against the `fake_root` repository with faked git and mutmut."""
     fake = FakeMutmut(files, results)
     monkeypatch.setattr(mr, "run", fake)
-    monkeypatch.setattr(mr, "PYPROJECT", tmp_path / "pyproject.toml")
-    (tmp_path / "pyproject.toml").write_text("[tool.x]\n", encoding="utf-8")
     monkeypatch.setattr(mr, "functions_touching", lambda _source, _lines: {"f"})
     monkeypatch.setattr(sys, "argv", ["mr", "--base", "b", "--out", str(tmp_path / "out")])
     code = mr.main()
@@ -213,6 +252,7 @@ def _main(monkeypatch, tmp_path, files, results):
     return code, report, summary, fake
 
 
+@pytest.mark.usefixtures("fake_root")
 def test_main_scripts_only_reports_agent_ops(monkeypatch, tmp_path):
     results = "agent_ops.x_f__mutmut_1: survived\nagent_ops.x_f__mutmut_2: killed\n"
     code, report, summary, fake = _main(
@@ -230,7 +270,7 @@ def test_main_scripts_only_reports_agent_ops(monkeypatch, tmp_path):
     assert len(cwds) == 1
     assert cwds[0] != mr.ROOT
     assert set(fake.mutmut_calls("show")) == set(cwds)
-    assert (tmp_path / "pyproject.toml").read_text(encoding="utf-8") == "[tool.x]\n"
+    assert mr.PYPROJECT.read_text(encoding="utf-8") == "[tool.x]\n"
     # the mutated script is not also copied unmutated, its tests are
     (section,) = fake.sections
     assert 'source_paths = ["agent_ops.py"]' in section
@@ -248,6 +288,7 @@ def test_mutmut_section_keeps_explicit_empty_selection():
     assert "also_copy = []" in section
 
 
+@pytest.mark.usefixtures("fake_root")
 def test_main_only_script_tests_changed_mutates_nothing(monkeypatch, tmp_path):
     code, report, summary, fake = _main(
         monkeypatch, tmp_path, [".github/scripts/test_agent_ops.py"], ""
@@ -258,6 +299,7 @@ def test_main_only_script_tests_changed_mutates_nothing(monkeypatch, tmp_path):
     assert fake.mutmut_calls("run") == []
 
 
+@pytest.mark.usefixtures("fake_root")
 def test_main_flathunter_only_unchanged(monkeypatch, tmp_path):
     results = "flathunter.filter.x_f__mutmut_1: survived\n"
     _code, report, summary, fake = _main(monkeypatch, tmp_path, ["flathunter/filter.py"], results)
@@ -265,9 +307,10 @@ def test_main_flathunter_only_unchanged(monkeypatch, tmp_path):
     assert summary["changed_function_survivors"] == ["flathunter.filter.x_f__mutmut_1"]
     assert fake.mutmut_calls("run") == [mr.ROOT]
     assert fake.mutmut_calls("results") == [mr.ROOT]
-    assert (tmp_path / "pyproject.toml").read_text(encoding="utf-8") == "[tool.x]\n"
+    assert mr.PYPROJECT.read_text(encoding="utf-8") == "[tool.x]\n"
 
 
+@pytest.mark.usefixtures("fake_root")
 def test_main_both_groups_in_one_report(monkeypatch, tmp_path):
     results = "flathunter.filter.x_f__mutmut_1: survived\nagent_ops.x_f__mutmut_1: survived\n"
     _code, report, summary, fake = _main(
