@@ -953,7 +953,7 @@ def cmd_wait_checks(args) -> int:
         settled = seen_any_at is not None and time.time() - seen_any_at > 60
         if checks and not pending and settled:
             if failed and retry_first_attempts(failed_run_ids(failed), tried):
-                seen_any_at = time.time()  # wait for the re-run like for a new push
+                seen_any_at = None  # the re-run registers like a new push
                 continue
             names = ", ".join(f"{c['workflow']}/{c['name']}" for c in failed)
             set_output("result", "fail" if failed else "pass")
