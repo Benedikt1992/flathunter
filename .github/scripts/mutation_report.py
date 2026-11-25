@@ -44,6 +44,7 @@ ROOT = Path(__file__).resolve().parents[2]
 PYPROJECT = ROOT / "pyproject.toml"
 SCRIPTS_PREFIX = ".github/scripts/"
 MAX_SHOWN = 30
+MUTMUT_ATTEMPTS = 3
 
 
 def run(
@@ -113,10 +114,11 @@ def mutant_location(name: str, prefix: str = "") -> tuple[str, str]:
     """
     base = name.rsplit("__mutmut_", 1)[0]
     module, _, func = base.rpartition(".")
+    path = prefix + module.replace(".", "/") + ".py"
     # mutmut names methods "xǁClassǁmethod" and functions "x_function"
-    func = func.removeprefix("xǁ").replace("ǁ", ".") if func.startswith("xǁ") else func
-    func = func.removeprefix("x_")
-    return prefix + module.replace(".", "/") + ".py", func
+    if func.startswith("xǁ"):
+        return path, func.removeprefix("xǁ").replace("ǁ", ".")
+    return path, func.removeprefix("x_")
 
 
 def failing_tests(cwd: Path, targets: tuple[str, ...] = ()) -> list[str]:
@@ -203,26 +205,34 @@ def run_mutmut(
     write: Callable[[str], None],
     cwd: Path,
     make_section: Callable[[list[str], list[str]], str] = mutmut_section,
-) -> bool:
-    """Run mutmut in `cwd`; False if it timed out.
+) -> str:
+    """Run mutmut in `cwd`; return "" if it finished, otherwise a warning for the report.
 
     Tests that only fail inside mutmut's sandbox (e.g. path-dependent ones) abort its
-    baseline run; they are added to `deselect` and the run is retried.
+    baseline run; they are added to `deselect` and the run is retried. A failure that
+    names no test (e.g. an incompatible mutmut/pytest pair) is reported, never taken
+    for an empty result.
     """
     try:
-        for _attempt in range(3):
+        for _attempt in range(MUTMUT_ATTEMPTS):
             write(make_section(paths, deselect))
             result = run(["mutmut", "run", "--max-children", "4"], timeout=timeout, cwd=cwd)
             if result.returncode == 0:
-                return True
+                return ""
             output = result.stdout + result.stderr
             failed = re.findall(r"^(?:FAILED|ERROR) (\S+)", output, re.MULTILINE)
             if not failed:
-                return True
+                return f"mutmut failed (exit code {result.returncode}): {last_line(output)}"
             deselect.extend(node for node in failed if node not in deselect)
     except subprocess.TimeoutExpired:
-        return False
-    return True
+        return f"mutmut stopped after {timeout}s; partial results."
+    return f"mutmut still failed after {MUTMUT_ATTEMPTS} attempts; results are incomplete."
+
+
+def last_line(output: str) -> str:
+    """The last non-empty line of a command's output, for a one-line warning."""
+    lines = [line.strip() for line in output.splitlines() if line.strip()]
+    return f"`{lines[-1]}`" if lines else "no output"
 
 
 def classify(
@@ -250,7 +260,7 @@ class Group(NamedTuple):
     relevant: list[str]
     deselect: list[str]
     details: list[str]
-    timed_out: bool
+    warning: str
 
 
 def render_survivors(relevant: list[str], cwd: Path) -> list[str]:
@@ -263,7 +273,7 @@ def render_survivors(relevant: list[str], cwd: Path) -> list[str]:
     return lines
 
 
-def render(groups: list[Group], timeout: int) -> list[str]:
+def render(groups: list[Group]) -> list[str]:
     """Markdown report lines for all passes."""
     lines = [
         "| File | killed | survived | no tests | timeout | score |",
@@ -286,8 +296,9 @@ def render(groups: list[Group], timeout: int) -> list[str]:
     deselected = sum(len(group.deselect) for group in groups)
     if deselected:
         lines += ["", f"_{deselected} test(s) failing before mutation were deselected._"]
-    if any(group.timed_out for group in groups):
-        lines += ["", f"Warning: mutmut stopped after {timeout}s; partial results."]
+    for group in groups:
+        if group.warning:
+            lines += ["", f"**Warning:** {group.warning}"]
     return lines
 
 
@@ -306,13 +317,12 @@ def _collect(
     deselect: list[str],
     cwd: Path,
     prefix: str,
-    *,
-    timed_out: bool,
+    warning: str,
 ) -> Group:
     """Read the results of a finished mutmut pass (its config must still be in place)."""
     results = run(["mutmut", "results", "--all", "true"], cwd=cwd).stdout
     statuses, relevant = classify(results, touched, prefix)
-    return Group(statuses, relevant, deselect, render_survivors(relevant, cwd), timed_out)
+    return Group(statuses, relevant, deselect, render_survivors(relevant, cwd), warning)
 
 
 def mutate_flathunter(base: str, paths: list[str], timeout: int) -> Group:
@@ -320,8 +330,8 @@ def mutate_flathunter(base: str, paths: list[str], timeout: int) -> Group:
     touched = _touched(base, paths)
     deselect = failing_tests(ROOT)
     with temporary_config(PYPROJECT.read_text(encoding="utf-8")) as write:
-        done = run_mutmut(paths, deselect, timeout, write, ROOT)
-        return _collect(touched, deselect, ROOT, "", timed_out=not done)
+        warning = run_mutmut(paths, deselect, timeout, write, ROOT)
+        return _collect(touched, deselect, ROOT, "", warning)
 
 
 def mutate_scripts(base: str, paths: list[str], timeout: int) -> Group:
@@ -333,8 +343,8 @@ def mutate_scripts(base: str, paths: list[str], timeout: int) -> Group:
         # the mutated files must not also be copied unmutated
         copy = sorted(p.name for p in work.glob("*.py") if p.name not in names)
         make_section = partial(mutmut_section, copy=copy, selection=["."])
-        done = run_mutmut(names, deselect, timeout, write, work, make_section)
-        return _collect(touched, deselect, work, SCRIPTS_PREFIX, timed_out=not done)
+        warning = run_mutmut(names, deselect, timeout, write, work, make_section)
+        return _collect(touched, deselect, work, SCRIPTS_PREFIX, warning)
 
 
 def main() -> int:
@@ -365,7 +375,7 @@ def main() -> int:
             "nothing to mutate."
         )
     else:
-        lines += render(groups, args.timeout)
+        lines += render(groups)
         summary = {
             "files": {path: dict(c) for g in groups for path, c in g.statuses.items()},
             "changed_function_survivors": [name for g in groups for name in g.relevant],

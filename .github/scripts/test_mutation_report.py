@@ -6,6 +6,7 @@ import subprocess
 import sys
 from collections import Counter
 from pathlib import Path
+from types import SimpleNamespace
 
 import mutation_report as mr
 import pytest
@@ -323,34 +324,378 @@ def test_main_both_groups_in_one_report(monkeypatch, tmp_path):
     assert len(summary["files"]) == 2
 
 
+def _proc(code=0, out="", err=""):
+    return subprocess.CompletedProcess(["cmd"], code, out, err)
+
+
+class FakeRun:
+    """Stand-in for `run`: records (cmd, timeout, cwd) and answers from a list.
+
+    An exception in the list is raised instead; after the list, calls succeed silently.
+    """
+
+    def __init__(self, *answers):
+        self.answers, self.calls = list(answers), []
+
+    def __call__(self, cmd, timeout=None, cwd=None):
+        self.calls.append((cmd, timeout, cwd))
+        answer = self.answers.pop(0) if self.answers else _proc()
+        if isinstance(answer, BaseException):
+            raise answer
+        return answer
+
+
+def test_mutant_location_strips_only_the_last_suffix_and_the_x_prefix():
+    assert mr.mutant_location("m.x_a__mutmut_b__mutmut_7") == ("m.py", "a__mutmut_b")
+    # a class whose name starts with "x_" keeps it
+    assert mr.mutant_location("m.xǁx_Cfgǁload__mutmut_1") == ("m.py", "x_Cfg.load")
+
+
+def test_changed_files_compare_added_and_modified_files_with_the_merge_base(monkeypatch):
+    listing = "flathunter/a.py\n.github/scripts/b.py\n"
+    fake = FakeRun(_proc(0, listing), _proc(0, listing))
+    monkeypatch.setattr(mr, "run", fake)
+    assert mr.changed_sources("origin/x") == ["flathunter/a.py"]
+    assert mr.changed_scripts("origin/x") == [".github/scripts/b.py"]
+    git = ["git", "diff", "--name-only", "--diff-filter=AM", "origin/x...HEAD"]
+    assert fake.calls == [(git, None, None), (git, None, None)]
+
+
+def test_failing_tests_runs_the_offline_tests_and_collects_node_ids(monkeypatch, tmp_path):
+    output = (
+        "FAILED test_a.py::test_x - AssertionError\n"
+        "ERROR test_b.py::test_y\n"
+        "FAILED test_a.py::test_x - reported twice\n"
+        "  FAILED indented.py::not_a_summary_line\n"
+        "1 failed, 1 error in 0.1s\n"
+    )
+    fake = FakeRun(_proc(1, output))
+    monkeypatch.setattr(mr, "run", fake)
+    assert mr.failing_tests(tmp_path, (".",)) == ["test_a.py::test_x", "test_b.py::test_y"]
+    pytest_cmd = [sys.executable, "-m", "pytest", "-q", "-rfE", "-p", "no:cacheprovider"]
+    assert fake.calls == [([*pytest_cmd, "-m", "not live", "."], None, tmp_path)]
+
+
+def _section(paths, deselect):
+    return f"{paths} {deselect}"
+
+
+def test_run_mutmut_runs_once_when_mutmut_succeeds(monkeypatch, tmp_path):
+    fake = FakeRun(_proc(0))
+    monkeypatch.setattr(mr, "run", fake)
+    written = []
+    assert mr.run_mutmut(["a.py"], [], 77, written.append, tmp_path, _section) == ""
+    assert fake.calls == [(["mutmut", "run", "--max-children", "4"], 77, tmp_path)]
+    assert written == ["['a.py'] []"]
+
+
+def test_run_mutmut_deselects_tests_failing_in_the_sandbox_and_retries(monkeypatch, tmp_path):
+    fake = FakeRun(
+        _proc(1, "FAILED t.py::a - boom\nERROR t.py::old\n", "ERROR t.py::b\n"), _proc(0)
+    )
+    monkeypatch.setattr(mr, "run", fake)
+    deselect = ["t.py::old"]
+    written = []
+    assert mr.run_mutmut(["a.py"], deselect, 5, written.append, tmp_path, _section) == ""
+    assert deselect == ["t.py::old", "t.py::a", "t.py::b"]
+    assert written == [
+        "['a.py'] ['t.py::old']",
+        "['a.py'] ['t.py::old', 't.py::a', 't.py::b']",
+    ]
+    assert len(fake.calls) == 2
+
+
+def test_run_mutmut_reports_a_failure_that_names_no_test(monkeypatch, tmp_path):
+    # mutmut 3.7 with pytest 9.2: every run ended like this and looked like 0 mutants
+    output = (
+        "AttributeError: 'Function' object has no attribute '_nodeid'\n\n"
+        "failed to collect stats. runner returned 1\n\n"
+    )
+    monkeypatch.setattr(mr, "run", FakeRun(_proc(2, output)))
+    warning = mr.run_mutmut(["a.py"], [], 5, lambda _text: None, tmp_path, _section)
+    assert warning == "mutmut failed (exit code 2): `failed to collect stats. runner returned 1`"
+
+
+def test_run_mutmut_gives_up_after_three_attempts(monkeypatch, tmp_path):
+    fake = FakeRun(*(_proc(1, f"FAILED t.py::{name}\n") for name in "abcd"))
+    monkeypatch.setattr(mr, "run", fake)
+    deselect = []
+    warning = mr.run_mutmut(["a.py"], deselect, 5, lambda _text: None, tmp_path, _section)
+    assert warning == "mutmut still failed after 3 attempts; results are incomplete."
+    assert deselect == ["t.py::a", "t.py::b", "t.py::c"]
+    assert len(fake.calls) == 3
+
+
+def test_run_mutmut_reports_a_timeout(monkeypatch, tmp_path):
+    monkeypatch.setattr(mr, "run", FakeRun(subprocess.TimeoutExpired(["mutmut"], 9)))
+    warning = mr.run_mutmut(["a.py"], [], 9, lambda _text: None, tmp_path, _section)
+    assert warning == "mutmut stopped after 9s; partial results."
+
+
+def test_last_line_skips_blank_lines_and_trims():
+    assert mr.last_line("first\n  second  \n\n   \n") == "`second`"
+    assert mr.last_line("\n \n") == "no output"
+
+
+def test_render_survivors_shows_each_diff_up_to_the_limit(monkeypatch, tmp_path):
+    names = [f"m.x_f__mutmut_{i}" for i in range(mr.MAX_SHOWN + 1)]
+    fake = FakeRun(*(_proc(0, f"  -a{i}\n+b{i}\n") for i in range(len(names))))
+    monkeypatch.setattr(mr, "run", fake)
+    lines = mr.render_survivors(names, tmp_path)
+    assert lines[:14] == [
+        *["", "<details><summary><code>m.x_f__mutmut_0</code></summary>", ""],
+        *["```diff", "-a0\n+b0", "```", "</details>"],
+        *["", "<details><summary><code>m.x_f__mutmut_1</code></summary>", ""],
+        *["```diff", "-a1\n+b1", "```", "</details>"],
+    ]
+    assert len(lines) == 7 * mr.MAX_SHOWN
+    assert fake.calls[0] == (["mutmut", "show", "m.x_f__mutmut_0"], None, tmp_path)
+    assert len(fake.calls) == mr.MAX_SHOWN
+
+
+HEADER = ["| File | killed | survived | no tests | timeout | score |", "|---|---|---|---|---|---|"]
+
+
+def test_render_lists_files_survivors_deselected_tests_and_warnings():
+    first = mr.Group(
+        {"a.py": Counter(killed=3, survived=1, timeout=2), "b.py": Counter({"no tests": 4})},
+        ["a.x_f__mutmut_1"],
+        ["t::x"],
+        ["<details a>"],
+        "",
+    )
+    second = mr.Group({}, [], ["t::y"], [], "mutmut stopped after 9s; partial results.")
+    assert mr.render([first, second]) == [
+        *HEADER,
+        "| `a.py` | 3 | 1 | 0 | 2 | 75% |",
+        "| `b.py` | 0 | 0 | 4 | 0 | - |",
+        "",
+        "**Surviving mutants in changed functions: 1**",
+        "",
+        "Each one is a code change the tests did not notice:",
+        "<details a>",
+        "",
+        "_2 test(s) failing before mutation were deselected._",
+        "",
+        "**Warning:** mutmut stopped after 9s; partial results.",
+    ]
+
+
+def test_render_without_survivors_has_no_hint_and_no_warning():
+    group = mr.Group({"a.py": Counter(killed=2)}, [], [], [], "")
+    assert mr.render([group]) == [
+        *HEADER,
+        "| `a.py` | 2 | 0 | 0 | 0 | 100% |",
+        "",
+        "**Surviving mutants in changed functions: 0**",
+        "",
+    ]
+
+
+@pytest.mark.usefixtures("fake_root")
+def test_touched_reads_the_file_and_its_changed_lines(monkeypatch):
+    fake = FakeRun(_proc(0, "@@ -0,0 +1,2 @@\n"))
+    monkeypatch.setattr(mr, "run", fake)
+    assert mr._touched("origin/x", ["flathunter/filter.py"]) == {"flathunter/filter.py": {"f"}}
+    git = ["git", "diff", "--unified=0", "origin/x...HEAD", "--", "flathunter/filter.py"]
+    assert fake.calls == [(git, None, None)]
+
+
+def test_collect_reads_all_results_of_the_pass_directory(monkeypatch, tmp_path):
+    results = "    agent_ops.x_f__mutmut_1: survived\n    agent_ops.x_g__mutmut_1: killed\n"
+    fake = FakeRun(_proc(0, results), _proc(0, "-a\n+b"))
+    monkeypatch.setattr(mr, "run", fake)
+    touched = {".github/scripts/agent_ops.py": {"f"}}
+    group = mr._collect(touched, ["t::a"], tmp_path, ".github/scripts/", "careful")
+    assert group == mr.Group(
+        {".github/scripts/agent_ops.py": Counter(survived=1, killed=1)},
+        ["agent_ops.x_f__mutmut_1"],
+        ["t::a"],
+        [
+            *["", "<details><summary><code>agent_ops.x_f__mutmut_1</code></summary>", ""],
+            *["```diff", "-a\n+b", "```", "</details>"],
+        ],
+        "careful",
+    )
+    assert fake.calls[:2] == [
+        (["mutmut", "results", "--all", "true"], None, tmp_path),
+        (["mutmut", "show", "agent_ops.x_f__mutmut_1"], None, tmp_path),
+    ]
+
+
+def _fake_pass_steps(monkeypatch):
+    """Replace the steps of a mutation pass; returns the list of recorded calls."""
+    calls = []
+
+    def touched(base, paths):
+        calls.append(("touched", base, paths))
+        return {"x": {"f"}}
+
+    def baseline(cwd, targets=()):
+        calls.append(("baseline", cwd, targets))
+        return ["t::a"]
+
+    def run_mutmut(paths, deselect, timeout, write, cwd, make_section=mr.mutmut_section):
+        write("[tool.mutmut]\n")
+        calls.append(("mutmut", paths, list(deselect), timeout, cwd, make_section(paths, [])))
+        return "careful"
+
+    def collect(touched, deselect, cwd, prefix, warning):
+        config = (cwd / "pyproject.toml").read_text(encoding="utf-8")
+        calls.append(("collect", touched, deselect, cwd, prefix, warning, config))
+        return "group"
+
+    monkeypatch.setattr(mr, "_touched", touched)
+    monkeypatch.setattr(mr, "failing_tests", baseline)
+    monkeypatch.setattr(mr, "run_mutmut", run_mutmut)
+    monkeypatch.setattr(mr, "_collect", collect)
+    return calls
+
+
+def test_mutate_flathunter_runs_in_the_repository(fake_root, monkeypatch):
+    calls = _fake_pass_steps(monkeypatch)
+    assert mr.mutate_flathunter("origin/x", ["flathunter/filter.py"], 42) == "group"
+    section = mr.mutmut_section(["flathunter/filter.py"], [])
+    config = "[tool.x]\n[tool.mutmut]\n"  # still in place while the results are read
+    assert calls == [
+        ("touched", "origin/x", ["flathunter/filter.py"]),
+        ("baseline", fake_root, ()),
+        ("mutmut", ["flathunter/filter.py"], ["t::a"], 42, fake_root, section),
+        ("collect", {"x": {"f"}}, ["t::a"], fake_root, "", "careful", config),
+    ]
+    assert mr.PYPROJECT.read_text(encoding="utf-8") == "[tool.x]\n"
+
+
+def test_mutate_scripts_runs_in_a_copy_on_the_tests_there(fake_root, monkeypatch):
+    calls = _fake_pass_steps(monkeypatch)
+    paths = [".github/scripts/agent_ops.py"]
+    assert mr.mutate_scripts("origin/x", paths, 42) == "group"
+    (_, work, targets) = calls[1]
+    assert work.name == "scripts"
+    assert not work.is_relative_to(fake_root)
+    section = mr.mutmut_section(
+        ["agent_ops.py"],
+        [],
+        copy=["mutation_report.py", "test_mutation_report.py"],
+        selection=["."],
+    )
+    assert calls == [
+        ("touched", "origin/x", paths),
+        ("baseline", work, (".",)),
+        ("mutmut", ["agent_ops.py"], ["t::a"], 42, work, section),
+        ("collect", {"x": {"f"}}, ["t::a"], work, ".github/scripts/", "careful", "[tool.mutmut]\n"),
+    ]
+    assert targets == (".",)
+
+
+def test_main_requires_a_base(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["mr"])
+    with pytest.raises(SystemExit) as exit_info:
+        mr.main()
+    assert exit_info.value.code == 2
+    assert "--base" in capsys.readouterr().err
+
+
+def test_main_help_describes_the_options(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["mr", "--help"])
+    with pytest.raises(SystemExit):
+        mr.main()
+    text = " ".join(capsys.readouterr().out.split())
+    assert "Mutation testing for the source files a branch changed (mutmut), as a report." in text
+    assert "--base BASE base ref, e.g. origin/fork-main" in text
+    assert "--out OUT output directory" in text
+    assert "--timeout TIMEOUT seconds for mutmut run" in text
+
+
+def _fake_passes(monkeypatch, sources, scripts, clock):
+    """Fake the change detection, both passes and the clock; returns the recorded calls."""
+    seen = []
+
+    def change(kind, files):
+        return lambda base: seen.append((kind, base)) or files
+
+    def mutate(kind):
+        def run_pass(base, paths, timeout):
+            seen.append((kind, base, paths, timeout))
+            return mr.Group({}, [], [], [], "")
+
+        return run_pass
+
+    monkeypatch.setattr(mr, "changed_sources", change("sources", sources))
+    monkeypatch.setattr(mr, "changed_scripts", change("scripts", scripts))
+    monkeypatch.setattr(mr, "mutate_flathunter", mutate("flathunter pass"))
+    monkeypatch.setattr(mr, "mutate_scripts", mutate("scripts pass"))
+    ticks = iter(clock)
+    monkeypatch.setattr(mr, "time", SimpleNamespace(monotonic=lambda: next(ticks)))
+    return seen
+
+
+def _argv(monkeypatch, tmp_path, *extra):
+    monkeypatch.setattr(sys, "argv", ["mr", "--base", "b", "--out", str(tmp_path), *extra])
+
+
 def test_main_splits_timeout_budget_between_passes(monkeypatch, tmp_path):
-    seen: dict[str, int] = {}
-    monkeypatch.setattr(
-        mr,
-        "mutate_flathunter",
-        lambda _b, _p, t: (
-            seen.setdefault("flathunter", t) and mr.Group({}, [], [], [], timed_out=False)
-        ),
+    seen = _fake_passes(
+        monkeypatch, ["flathunter/x.py"], [".github/scripts/a.py"], [1000.0, 1300.5]
     )
-    monkeypatch.setattr(
-        mr,
-        "mutate_scripts",
-        lambda _b, _p, t: (
-            seen.setdefault("scripts", t) and mr.Group({}, [], [], [], timed_out=False)
-        ),
-    )
-    monkeypatch.setattr(mr, "changed_sources", lambda _b: ["flathunter/x.py"])
-    monkeypatch.setattr(mr, "changed_scripts", lambda _b: [".github/scripts/a.py"])
-    monkeypatch.setattr(
-        sys, "argv", ["mr", "--base", "b", "--out", str(tmp_path), "--timeout", "1000"]
-    )
+    _argv(monkeypatch, tmp_path, "--timeout", "1001")
     assert mr.main() == 0
-    assert seen["flathunter"] == 500
-    assert 0 < seen["scripts"] <= 500 + 500
+    assert seen == [
+        ("sources", "b"),
+        ("scripts", "b"),
+        ("flathunter pass", "b", ["flathunter/x.py"], 500),
+        # the scripts pass gets what the first one left: 1001 - 300 s
+        ("scripts pass", "b", [".github/scripts/a.py"], 701),
+    ]
 
 
-def test_render_reports_deselected_and_timeout():
-    group = mr.Group({}, [], ["t::a"], [], timed_out=True)
-    text = "\n".join(mr.render([group], 99))
-    assert "1 test(s) failing before mutation were deselected" in text
-    assert "stopped after 99s" in text
+def test_main_gives_a_single_pass_the_whole_budget(monkeypatch, tmp_path):
+    seen = _fake_passes(monkeypatch, ["flathunter/x.py"], [], [0.0])
+    _argv(monkeypatch, tmp_path, "--timeout", "1001")
+    assert mr.main() == 0
+    assert seen[-1] == ("flathunter pass", "b", ["flathunter/x.py"], 1001)
+
+
+def test_main_keeps_one_second_for_the_scripts_pass_when_the_budget_is_spent(monkeypatch, tmp_path):
+    seen = _fake_passes(monkeypatch, ["flathunter/x.py"], [".github/scripts/a.py"], [0.0, 50.0])
+    _argv(monkeypatch, tmp_path, "--timeout", "10")
+    assert mr.main() == 0
+    assert seen[-1] == ("scripts pass", "b", [".github/scripts/a.py"], 1)
+
+
+def test_main_defaults_to_20_minutes_and_mutation_report_folder(fake_root, monkeypatch):
+    seen = _fake_passes(monkeypatch, [], [".github/scripts/a.py"], [7.0, 7.0])
+    monkeypatch.setattr(sys, "argv", ["mr", "--base", "b"])
+    assert mr.main() == 0
+    assert seen[-1] == ("scripts pass", "b", [".github/scripts/a.py"], 1200)
+    assert (fake_root / "mutation-report" / "report.md").is_file()
+
+
+def test_main_writes_report_and_summary_and_prints_the_report(monkeypatch, tmp_path, capsys):
+    group = mr.Group({"a.py": Counter(killed=1)}, ["a.x_f__mutmut_1"], ["t::a"], ["D"], "")
+    _fake_passes(monkeypatch, ["flathunter/a.py"], [], [0.0])
+    monkeypatch.setattr(mr, "mutate_flathunter", lambda *_args: group)
+    out = tmp_path / "new" / "nested"
+    _argv(monkeypatch, out)
+    assert mr.main() == 0
+    report = "\n".join(["## Mutation testing", "", *mr.render([group])]) + "\n"
+    assert (out / "report.md").read_text(encoding="utf-8") == report
+    summary = {
+        "files": {"a.py": {"killed": 1}},
+        "changed_function_survivors": ["a.x_f__mutmut_1"],
+        "deselected": ["t::a"],
+    }
+    assert (out / "summary.json").read_text(encoding="utf-8") == json.dumps(summary, indent=2)
+    assert capsys.readouterr().out == report + "\n"
+
+
+def test_main_without_changes_says_there_is_nothing_to_mutate(monkeypatch, tmp_path):
+    _fake_passes(monkeypatch, [], [], [0.0])
+    _argv(monkeypatch, tmp_path)
+    assert mr.main() == 0
+    assert (tmp_path / "report.md").read_text(encoding="utf-8") == (
+        "## Mutation testing\n\n"
+        "No changed modules under `flathunter/` or scripts under `.github/scripts/`; "
+        "nothing to mutate.\n"
+    )
+    assert (tmp_path / "summary.json").read_text(encoding="utf-8") == "{}"
