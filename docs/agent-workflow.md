@@ -265,7 +265,9 @@ via repository variables. Failed fixer runs without commits do not use up `AGENT
   mutmut version that does not work with the installed pytest), so the numbers are not
   meaningful. The warning quotes mutmut's last output line; run
   `python .github/scripts/mutation_report.py --base origin/fork-main` locally for the full
-  output. A timeout or tests that keep failing in mutmut's sandbox are reported the same way.
+  output. A timeout, or tests that still fail in mutmut's sandbox after three attempts, are
+  reported the same way. Tests that already fail before any mutation are not a warning: they
+  are deselected and counted (`_N test(s) failing before mutation were deselected._`).
 - **Push failed / work saved as artifact**: both workflows push with
   `python3 .github/scripts/agent_ops.py push-branch <branch>` (at most 4 attempts, waits of 5, 15
   and 45 s; if the remote branch moved it is fetched and merged with `git merge --no-edit`,

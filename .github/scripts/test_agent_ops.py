@@ -1084,8 +1084,11 @@ class _Clock:
         self.now += seconds
 
 
-def _wait_checks(monkeypatch, polls, attempt):
-    """Run cmd_wait_checks against `polls` (one answer per poll, the last repeats)."""
+def _wait_checks(monkeypatch, polls, attempt, latency=0.0):
+    """Run cmd_wait_checks against `polls` (one answer per poll, the last repeats).
+
+    Each `gh pr checks` call takes `latency` seconds of the fake clock.
+    """
     clock, outputs, reruns = _Clock(), {}, []
     monkeypatch.setattr(ops, "time", clock)
     monkeypatch.setenv("GITHUB_REPOSITORY", "o/r")
@@ -1096,6 +1099,7 @@ def _wait_checks(monkeypatch, polls, attempt):
             return ""
         assert args == ("pr", "checks", "68", "--json", "name,bucket,workflow,link")
         assert kwargs == {"check": False}  # gh exits non-zero for failed or pending checks
+        clock.now += latency
         poll = polls.pop(0) if len(polls) > 1 else polls[0]
         return poll if isinstance(poll, str) else json.dumps(poll)
 
@@ -1133,3 +1137,11 @@ def test_wait_checks_times_out_while_checks_stay_pending(monkeypatch):
     outputs, _reruns, now = _wait_checks(monkeypatch, [[_check("t", "pending", 5)]], attempt=1)
     assert outputs == {"result": "timeout"}
     assert now == 1000.0 + 45 * 60
+
+
+def test_wait_checks_settles_60_seconds_after_the_first_seen_poll(monkeypatch):
+    polls = [[_check("t", "pass", 5)]]
+    outputs, _reruns, now = _wait_checks(monkeypatch, polls, attempt=1, latency=0.5)
+    assert outputs == {"result": "pass", "failed": ""}
+    # seen at 1000.5, then polls at 1031.0 (30.5 s) and 1061.5 (61.0 s > 60 s)
+    assert now == 1061.5
