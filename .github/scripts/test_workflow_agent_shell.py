@@ -34,7 +34,7 @@ def test_writing_agents_may_delete_files() -> None:
     for name in WRITERS:
         (tools,) = TOOLS.findall("\n".join(_step(name)))
         allowed = tools.split(",")
-        for tool in ("Bash(rm:*)", "Bash(git rm:*)", "Bash(git commit:*)"):
+        for tool in ("Bash(rm:*)", "Bash(git rm:*)", "Bash(git mv:*)", "Bash(git commit:*)"):
             assert tool in allowed, f"{name}: {tool} missing"
 
 

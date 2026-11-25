@@ -916,19 +916,33 @@ def failed_run_ids(checks: list[dict]) -> list[str]:
     return sorted(ids)
 
 
+def run_attempt(run_id: str) -> object:
+    """Attempt number of a workflow run, or None if GitHub gave no usable answer.
+
+    Uses `check=False`: an API error here must not abort `wait-checks`.
+    """
+    answer = gh("api", f"repos/{repo()}/actions/runs/{run_id}", check=False)
+    try:
+        run = json.loads(answer)
+    except ValueError:
+        return None
+    return run.get("run_attempt") if isinstance(run, dict) else None
+
+
 def retry_first_attempts(run_ids: list[str], tried: set[str]) -> list[str]:
     """Re-run the failed jobs of runs not retried yet; return the ids re-run.
 
     A transient failure (e.g. a GitHub API error in a scanner) must not cost a fix
     round; a real failure only costs one more CI run. Each run is tried once per call
-    site (`tried`), so a re-run that does not start cannot keep the caller waiting.
+    site (`tried`), so a re-run that does not start cannot keep the caller waiting. If
+    the attempt cannot be read, the run is not re-run and its failure counts.
     """
     retried: list[str] = []
     for run_id in run_ids:
         if run_id in tried:
             continue
         tried.add(run_id)
-        if gh_json(f"repos/{repo()}/actions/runs/{run_id}").get("run_attempt") == 1:
+        if run_attempt(run_id) == 1:
             gh("run", "rerun", run_id, "--failed", check=False)
             retried.append(run_id)
     return retried

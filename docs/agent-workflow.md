@@ -260,7 +260,8 @@ via repository variables. Failed fixer runs without commits do not use up `AGENT
 - **A CI job failed for a reason outside the PR** (e.g. a GitHub API error in a
   scanner): before the review hands red CI to the fixer, `agent_ops.py wait-checks`
   re-runs the failed jobs of each failed run once (only runs still at attempt 1). Only a
-  failure that repeats costs a fix round.
+  failure that repeats costs a fix round. If GitHub does not say which attempt a run is
+  at, the run is not re-run and its failure goes to the fixer as before.
 - **"Warning: mutmut failed …" in the mutation report**: mutmut did not finish (e.g. a
   mutmut version that does not work with the installed pytest), so the numbers are not
   meaningful. The warning quotes mutmut's last output line; run
