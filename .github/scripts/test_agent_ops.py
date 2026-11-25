@@ -982,6 +982,34 @@ def test_count_fix_rounds_property(rounds):
     assert ops.count_fix_rounds(comments) == expected
 
 
+def test_mutation_report_fallback_names_both_scopes(monkeypatch):
+    monkeypatch.setattr(ops, "repo", lambda: "o/r")
+    monkeypatch.setattr(ops, "gh_json", lambda *_a, **_k: {"workflow_runs": []})
+    assert ops.mutation_report("abc") == (
+        "# Evidence: mutation testing\n\n"
+        "_No mutation report (no changed modules under flathunter/ "
+        "or scripts under .github/scripts/)._"
+    )
+
+
+def test_mutation_report_returns_downloaded_report(monkeypatch):
+    runs = {"workflow_runs": [{"name": "Other", "id": 1}, {"name": "Mutation", "id": 2}]}
+    monkeypatch.setattr(ops, "repo", lambda: "o/r")
+    monkeypatch.setattr(ops, "gh_json", lambda *_a, **_k: runs)
+    calls = []
+
+    def fake_gh(*args, **_k):
+        calls.append(args)
+        (ops.Path(args[args.index("-D") + 1]) / "report.md").write_text("BODY", encoding="utf-8")
+        return ""
+
+    monkeypatch.setattr(ops, "gh", fake_gh)
+    out = ops.mutation_report("abc")
+    assert out == "# Evidence: mutation testing of the changed modules\n\nBODY"
+    assert len(calls) == 1
+    assert calls[0][:3] == ("run", "download", "2")
+
+
 @given(st.sampled_from(["success", "failure"]), st.sampled_from(["done", ""]), st.integers(0, 5))
 def test_fix_round_action_property(outcome, status, commits):
     _, action = ops.fix_round_decision(outcome, {"status": status}, commits)
