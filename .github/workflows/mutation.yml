@@ -1,4 +1,5 @@
-# Mutation testing of the modules a PR changed (report only, never blocking).
+# Mutation testing of the files a PR changed (report only, never blocking):
+# modules under flathunter/ and scripts under .github/scripts/ (without test_*.py).
 # Surviving mutants in changed functions mean the tests do not check that code.
 # The independent agent reviewer reads this report (artifact `mutation-report`)
 # and treats such survivors as weak tests.
@@ -8,6 +9,7 @@ on:
   pull_request:
     paths:
       - "flathunter/**.py"
+      - ".github/scripts/**.py"
 
 permissions:
   contents: read
