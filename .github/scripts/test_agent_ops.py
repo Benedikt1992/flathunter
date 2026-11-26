@@ -849,7 +849,8 @@ def test_blocked_footer_with_questions_points_to_question_comments():
         footer = ops.blocked_footer(count, "https://x/run/1")
         assert "Quote reply" in footer
         assert "`Qn:`" in footer
-        assert "`agent:ready`" in footer
+        assert "restarts automatically" in footer
+        assert "re-add" not in footer
         assert "[Run log](https://x/run/1)" in footer
         assert "Answer in a comment" not in footer
         assert "\n" not in footer
@@ -857,7 +858,7 @@ def test_blocked_footer_with_questions_points_to_question_comments():
 
 def test_blocked_footer_without_questions_has_no_answer_hint():
     footer = ops.blocked_footer(0, "https://x/run/1")
-    assert footer == "Re-add `agent:ready` to retry. [Run log](https://x/run/1)"
+    assert footer == "Remove and re-add `agent:ready` to retry. [Run log](https://x/run/1)"
     for word in ("Answer", "answer", "Quote reply", "Qn:"):
         assert word not in footer
     assert ops.blocked_footer(-1, "u") == ops.blocked_footer(0, "u")
@@ -867,7 +868,7 @@ def test_blocked_footer_without_questions_has_no_answer_hint():
 def test_blocked_footer_property(count):
     footer = ops.blocked_footer(count, "https://x/run/1")
     assert "Answer in a comment" not in footer
-    assert "`agent:ready`" in footer
+    assert "restarts automatically" in footer
     assert "\n" not in footer
 
 
@@ -1218,6 +1219,12 @@ def test_restart_planner_when_last_question_answered():
 def test_restart_implementer_when_last_question_answered():
     comments = [*_two_questions_first_answered(), _comment("owner", "Q2: no")]
     assert _restart(BLOCKED, comments) == "implement"
+
+
+def test_blocked_implementer_wins_over_leftover_plan_ready():
+    labels = {"agent:plan-ready", "agent:ready", "agent:blocked"}
+    comments = [*_two_questions_first_answered(), _comment("owner", "Q2: no")]
+    assert _restart(labels, comments) == "implement"
 
 
 def test_one_comment_answering_all_questions_restarts():

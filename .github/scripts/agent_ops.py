@@ -309,10 +309,10 @@ def blocked_footer(count: int, run_url: str) -> str:
     """Closing line of the implementer's blocked comment, depending on open questions."""
     link = f"[Run log]({run_url})"
     if count <= 0:
-        return f"Re-add `agent:ready` to retry. {link}"
+        return f"Remove and re-add `agent:ready` to retry. {link}"
     return (
         "Answer each question in its own comment below (**Quote reply** or start with `Qn:`), "
-        f"then re-add `agent:ready` to retry. {link}"
+        f"the agent restarts automatically after the last answer. {link}"
     )
 
 
@@ -388,10 +388,10 @@ def restart_target(
         return None
     if not same_login((comments[position].get("user") or {}).get("login"), owner):
         return None
-    if "agent:plan-ready" in labels:
+    if {"agent:blocked", "agent:ready"} <= labels:
+        target = "implement"  # the latest asker wins: plan-ready stays on planned issues
+    elif "agent:plan-ready" in labels:
         target = "plan"
-    elif {"agent:blocked", "agent:ready"} <= labels:
-        target = "implement"
     else:
         return None
     before = open_question_count(comments[:position], owner, logins)
