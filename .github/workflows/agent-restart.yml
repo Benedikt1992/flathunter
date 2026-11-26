@@ -1,0 +1,53 @@
+# Agent · Restart
+# Trigger: a comment on an issue (not a PR) by the maintainer.
+# Result:  if it answers the last open agent question, the agent that asked restarts once
+#          (agent-plan.yml for `agent:plan-ready`, agent-implement.yml for `agent:blocked`
+#          + `agent:ready`). No model runs here; agent_ops.py restart-target decides.
+# Docs:    docs/agent-workflow.md
+name: "Agent · Restart"
+
+on:
+  issue_comment:
+    types: [created]
+
+# No concurrency group on purpose. In agent-issue-<n> a router run would cancel a pending
+# plan/implement run (GitHub keeps one pending run per group), and in a group of its own a
+# third comment would cancel the pending run of the comment that answered the last
+# question. Parallel runs are safe: each only reads and decides from the comments up to
+# its own trigger, so exactly one of them can see the last question answered.
+
+permissions:
+  contents: read
+  issues: read
+  actions: write  # dispatch the plan / implement workflow
+
+env:
+  ISSUE: ${{ github.event.issue.number }}
+  COMMENT: ${{ github.event.comment.id }}
+  MAINTAINER: ${{ vars.AGENT_MAINTAINER || github.repository_owner }}
+  DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  restart:
+    if: >-
+      !github.event.issue.pull_request &&
+      github.event.comment.user.login == (vars.AGENT_MAINTAINER || github.repository_owner)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Decide which agent to restart
+        id: decide
+        run: python3 .github/scripts/agent_ops.py restart-target "$ISSUE" "$COMMENT"
+
+      - name: Restart the planner
+        if: steps.decide.outputs.target == 'plan'
+        run: gh workflow run agent-plan.yml --ref "$DEFAULT_BRANCH" -f issue="$ISSUE"
+
+      - name: Restart the implementer
+        if: steps.decide.outputs.target == 'implement'
+        run: gh workflow run agent-implement.yml --ref "$DEFAULT_BRANCH" -f issue="$ISSUE"

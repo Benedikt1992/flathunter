@@ -1,5 +1,7 @@
 # Agent · Plan
-# Trigger: the maintainer adds the label `agent:plan` to an issue.
+# Trigger: the maintainer adds the label `agent:plan` to an issue, or agent-restart.yml
+#          dispatches a re-plan after the maintainer answered the last open question
+#          (only for issues labelled `agent:plan-ready`).
 # Result:  an implementation plan as issue comment (read-only agent, no code changes).
 #          Approve it by adding `agent:ready` (the implementer follows the plan),
 #          or comment with corrections and re-add `agent:plan`.
@@ -8,9 +10,14 @@ name: "Agent · Plan"
 on:
   issues:
     types: [labeled]
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: Issue number (must carry `agent:plan-ready`)
+        required: true
 
 concurrency:
-  group: agent-issue-${{ github.event.issue.number }}
+  group: agent-issue-${{ github.event.issue.number || inputs.issue }}
   cancel-in-progress: false
 
 permissions:
@@ -18,15 +25,16 @@ permissions:
   issues: write
 
 env:
-  ISSUE: ${{ github.event.issue.number }}
+  ISSUE: ${{ github.event.issue.number || inputs.issue }}
   MAINTAINER: ${{ vars.AGENT_MAINTAINER || github.repository_owner }}
   GH_TOKEN: ${{ github.token }}
 
 jobs:
   plan:
     if: >-
-      github.event.label.name == 'agent:plan' &&
-      github.event.sender.login == (vars.AGENT_MAINTAINER || github.repository_owner)
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.label.name == 'agent:plan' &&
+       github.event.sender.login == (vars.AGENT_MAINTAINER || github.repository_owner))
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -34,7 +42,19 @@ jobs:
         with:
           ref: ${{ github.event.repository.default_branch }}
 
+      - name: Dispatch only re-plans an issue that has a plan waiting for answers
+        id: gate
+        run: |
+          go=true
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] &&
+             ! gh issue view "$ISSUE" --json labels --jq '.labels[].name' | grep -qx 'agent:plan-ready'; then
+            echo "Issue #$ISSUE has no agent:plan-ready label; nothing to re-plan."
+            go=false
+          fi
+          echo "go=$go" >> "$GITHUB_OUTPUT"
+
       - name: Build context
+        if: steps.gate.outputs.go == 'true'
         id: prep
         run: |
           mkdir -p .agent
@@ -42,12 +62,14 @@ jobs:
           echo "schema=$(jq -c . .github/agents/schemas/plan.json)" >> "$GITHUB_OUTPUT"
 
       - name: Plan
+        if: steps.gate.outputs.go == 'true'
         id: claude
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ github.token }}
+          allowed_bots: github-actions
           prompt: |
             Read `.github/agents/planner.md` and follow it exactly.
             The issue (#${{ env.ISSUE }}) is in `.agent/context.md`. Return only the structured result.
@@ -59,6 +81,7 @@ jobs:
             --json-schema '${{ steps.prep.outputs.schema }}'
 
       - name: Post plan
+        if: steps.gate.outputs.go == 'true'
         env:
           OUT: ${{ steps.claude.outputs.structured_output }}
         run: |

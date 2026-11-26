@@ -305,14 +305,20 @@ def questions_pointer(count: int, phase: str) -> str:
     return f"{count} {noun}, {where}."
 
 
-def blocked_footer(count: int, run_url: str) -> str:
-    """Closing line of the implementer's blocked comment, depending on open questions."""
+def blocked_footer(count: int, run_url: str, status: str = "blocked") -> str:
+    """Closing line of the implementer's blocked comment.
+
+    Only a `blocked` run keeps `agent:ready` and restarts automatically after the last
+    answer; any other status ends as `agent:stuck` with `agent:ready` removed.
+    """
     link = f"[Run log]({run_url})"
-    if count <= 0:
+    if status != "blocked":
         return f"Re-add `agent:ready` to retry. {link}"
+    if count <= 0:
+        return f"Remove and re-add `agent:ready` to retry. {link}"
     return (
         "Answer each question in its own comment below (**Quote reply** or start with `Qn:`), "
-        f"then re-add `agent:ready` to retry. {link}"
+        f"the agent restarts automatically after the last answer. {link}"
     )
 
 
@@ -360,6 +366,43 @@ def split_issue_comments(
         if not ids:
             general.append(comment)
     return questions, answers, general
+
+
+def open_question_count(comments: list[dict], owner: str, logins: Sequence[str]) -> int:
+    """Number of agent questions that no maintainer comment answers yet."""
+    questions, answers, _ = split_issue_comments(comments, owner, logins)
+    return sum(1 for question in questions if not answers[question["id"]])
+
+
+RESTART_BLOCKERS = {"agent:in-progress", "agent:stuck"}
+
+
+def restart_target(
+    issue: dict, comments: list[dict], trigger_id: int, owner: str, logins: Sequence[str]
+) -> str | None:
+    """Agent to restart because the maintainer's comment `trigger_id` answered the last question.
+
+    Returns:
+        "plan" (planner asked), "implement" (blocked implementer asked) or None. Restarts only
+        if the comment is the maintainer's, an issue (not a PR) is meant, no run is active or
+        stuck, and the comment took the number of open questions from at least one to zero.
+        Only comments up to the trigger count, so each answer round restarts exactly once.
+    """
+    position = next((i for i, c in enumerate(comments) if c.get("id") == trigger_id), None)
+    labels = {label["name"] for label in issue.get("labels", [])}
+    if position is None or "pull_request" in issue or labels & RESTART_BLOCKERS:
+        return None
+    if not same_login((comments[position].get("user") or {}).get("login"), owner):
+        return None
+    if {"agent:blocked", "agent:ready"} <= labels:
+        target = "implement"  # the latest asker wins: plan-ready stays on planned issues
+    elif "agent:plan-ready" in labels:
+        target = "plan"
+    else:
+        return None
+    before = open_question_count(comments[:position], owner, logins)
+    after = open_question_count(comments[: position + 1], owner, logins)
+    return target if before > 0 and after == 0 else None
 
 
 def render_questions_section(
@@ -1267,6 +1310,15 @@ def cmd_next_startable(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_restart_target(args: argparse.Namespace) -> int:
+    """Output target=plan|implement|<empty>: which agent the maintainer's comment restarts."""
+    issue = gh_json(f"repos/{repo()}/issues/{args.issue}")
+    comments = gh_json(f"repos/{repo()}/issues/{args.issue}/comments?per_page=100", "--paginate")
+    target = restart_target(issue, comments, args.comment, maintainer(), agent_logins())
+    set_output("target", target or "")
+    return 0
+
+
 def cmd_post_review(args: argparse.Namespace) -> int:
     """Post the reviewer's structured result as a PR review; output verdict."""
     review = json.loads(Path(args.result).read_text(encoding="utf-8"))
@@ -1329,7 +1381,8 @@ def cmd_questions_pointer(args: argparse.Namespace) -> int:
 def cmd_blocked_footer(args: argparse.Namespace) -> int:
     """Output footer=<one line> for the implementer's blocked comment."""
     result = json.loads(Path(args.result).read_text(encoding="utf-8"))
-    set_output("footer", blocked_footer(len(question_entries(result)), args.run_url))
+    status = str(result.get("status") or "failed")
+    set_output("footer", blocked_footer(len(question_entries(result)), args.run_url, status))
     return 0
 
 
@@ -1513,6 +1566,14 @@ def add_question_parsers(sub: argparse._SubParsersAction[argparse.ArgumentParser
     p.set_defaults(func=cmd_fix_round)
 
 
+def add_restart_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    """Register the command that decides whether an answer restarts an agent."""
+    p = sub.add_parser("restart-target")
+    p.add_argument("issue", type=int)
+    p.add_argument("comment", type=int, help="id of the triggering issue comment")
+    p.set_defaults(func=cmd_restart_target)
+
+
 def main() -> int:
     """CLI entry point."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -1561,6 +1622,8 @@ def main() -> int:
     p = sub.add_parser("next-startable")
     p.add_argument("--max-parallel", type=int, default=2)
     p.set_defaults(func=cmd_next_startable)
+
+    add_restart_parser(sub)
 
     p = sub.add_parser("post-review")
     p.add_argument("pr", type=int)

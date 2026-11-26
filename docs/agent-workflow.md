@@ -34,7 +34,8 @@ Issue ──(maintainer: agent:plan)──► Planner ──► plan comment ─
 | Have an issue implemented | Write it with the **Task** template (clear acceptance criteria!), add `agent:ready` |
 | Work through a series of dependent issues | Add `agent:ready` to all of them. Issues whose `Blockiert durch:` / `Blocked by:` issues are still open wait (`agent:waiting`) and start automatically, lowest number first, once those are closed |
 | See the approach first (larger issues) | Add `agent:plan`, read the plan, then add `agent:ready` (or comment and re-add `agent:plan`) |
-| Answer an agent's open questions (`agent:blocked`, plan, PR) | Answer each question in its own conversation (see below), then re-add `agent:plan` or `agent:ready`, or submit a review with **Request changes** |
+| Answer an agent's open questions in the issue (`agent:plan-ready`, `agent:blocked`) | Answer each question in its own comment (see below). Your comment answering the **last** open question restarts the agent that asked, automatically; no label to re-add |
+| Answer an agent's open questions on a PR | Answer each question in its own review thread, then submit a review with **Request changes** |
 | Review a finished PR | PRs labelled `needs-human` request your review. Use "Files changed → Changes since your last review" in later rounds |
 | Get local changes | **Request changes** with inline comments. The fixer implements each point, replies per thread (doesn't resolve them), then CI + reviewer run again and you are requested again |
 | Stop an agent PR | Close it. Re-add `agent:ready` on the issue (after deleting the branch) to start over |
@@ -55,7 +56,16 @@ The plan, blocked and round comments only say how many questions there are.
 
 - **Before a PR exists** (planner, blocked implementer): one issue comment per question.
   Answer with **Quote reply** on that comment, or start your comment with the ID (`Q3: yes`).
-  Quoting several questions answers all of them. Then re-add `agent:plan` or `agent:ready`.
+  Quoting several questions answers all of them.
+  **Restart is automatic:** the router workflow `agent-restart.yml` (no model runs in it)
+  reacts to your issue comments. If the comment takes the number of open questions from at
+  least one to zero, the agent that asked restarts once: the planner for `agent:plan-ready`
+  (`agent-plan.yml` dispatch), the implementer for `agent:blocked` together with
+  `agent:ready` (`agent-implement.yml` dispatch). There is no `/continue`: if you still want
+  to change the issue, do it before the last answer. No restart happens for a partial answer,
+  further comments after all questions are answered, comments of others or of bots,
+  comments that answer no question, while a run is active (`agent:in-progress`), with
+  `agent:stuck`, or on PRs. The decision is `restart_target` in `agent_ops.py`.
 - **On a PR** (finished implementer, fixer): one review thread per question. Inline if the
   question is about a changed line, otherwise on the file or as a PR comment. Reply in the
   thread (PR comments: Quote reply or `Q3:`), then submit a review with **Request changes**.
@@ -79,7 +89,7 @@ criteria, non-goals, hints on the approach), and restart with `agent:plan`.
 | `agent:waiting` | agent | waiting for the issues in `Blockiert durch` to be closed |
 | `agent:queued` | agent | waiting for a free slot (`AGENT_MAX_PARALLEL`) |
 | `agent:in-progress` | agent | an agent is working |
-| `agent:blocked` | agent | open questions for you |
+| `agent:blocked` | agent | open questions for you. `agent:ready` stays; your answer to the last question restarts the implementer. The queue never starts issues with this label |
 | `agent:stuck` | agent | workflow failed, fix session failed without new commits, or round limit reached |
 | `needs-human` | agent | ready for your review |
 | `allow-*` | you | gate overrides for one PR |

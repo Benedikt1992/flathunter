@@ -847,9 +847,14 @@ def test_questions_pointer_command_counts_valid_entries(tmp_path, capsys):
 def test_blocked_footer_with_questions_points_to_question_comments():
     for count in (1, 3):
         footer = ops.blocked_footer(count, "https://x/run/1")
+        assert footer == (
+            "Answer each question in its own comment below (**Quote reply** or start with `Qn:`), "
+            "the agent restarts automatically after the last answer. [Run log](https://x/run/1)"
+        )
         assert "Quote reply" in footer
         assert "`Qn:`" in footer
-        assert "`agent:ready`" in footer
+        assert "restarts automatically" in footer
+        assert "re-add" not in footer
         assert "[Run log](https://x/run/1)" in footer
         assert "Answer in a comment" not in footer
         assert "\n" not in footer
@@ -857,7 +862,7 @@ def test_blocked_footer_with_questions_points_to_question_comments():
 
 def test_blocked_footer_without_questions_has_no_answer_hint():
     footer = ops.blocked_footer(0, "https://x/run/1")
-    assert footer == "Re-add `agent:ready` to retry. [Run log](https://x/run/1)"
+    assert footer == "Remove and re-add `agent:ready` to retry. [Run log](https://x/run/1)"
     for word in ("Answer", "answer", "Quote reply", "Qn:"):
         assert word not in footer
     assert ops.blocked_footer(-1, "u") == ops.blocked_footer(0, "u")
@@ -867,7 +872,7 @@ def test_blocked_footer_without_questions_has_no_answer_hint():
 def test_blocked_footer_property(count):
     footer = ops.blocked_footer(count, "https://x/run/1")
     assert "Answer in a comment" not in footer
-    assert "`agent:ready`" in footer
+    assert "restarts automatically" in footer
     assert "\n" not in footer
 
 
@@ -875,12 +880,28 @@ def test_blocked_footer_command_uses_valid_entries(tmp_path, capsys):
     result = tmp_path / "r.json"
     url = "https://x/run/1"
     args = ops.argparse.Namespace(result=str(result), run_url=url)
-    result.write_text('{"open_questions": [{"question": "A?"}, {"question": ""}]}')
+    result.write_text(
+        '{"status": "blocked", "open_questions": [{"question": "A?"}, {"question": ""}]}'
+    )
     assert ops.cmd_blocked_footer(args) == 0
     assert capsys.readouterr().out == "footer=" + ops.blocked_footer(1, url) + "\n"
-    result.write_text("{}")
+    result.write_text('{"status": "blocked"}')
     assert ops.cmd_blocked_footer(args) == 0
     assert capsys.readouterr().out == "footer=" + ops.blocked_footer(0, url) + "\n"
+    result.write_text('{"status": "failed", "open_questions": [{"question": "A?"}]}')
+    assert ops.cmd_blocked_footer(args) == 0
+    assert capsys.readouterr().out == "footer=" + ops.blocked_footer(1, url, "failed") + "\n"
+    result.write_text("{}")
+    assert ops.cmd_blocked_footer(args) == 0
+    assert capsys.readouterr().out == "footer=" + ops.blocked_footer(0, url, "failed") + "\n"
+
+
+def test_blocked_footer_for_stuck_run_promises_no_restart():
+    for count in (0, 2):
+        footer = ops.blocked_footer(count, "https://x/run/1", "failed")
+        assert footer == "Re-add `agent:ready` to retry. [Run log](https://x/run/1)"
+        assert "automatically" not in footer
+        assert "Remove" not in footer
 
 
 RUN_URL = "https://github.com/o/r/actions/runs/7"
@@ -1180,3 +1201,182 @@ def test_wait_checks_settles_60_seconds_after_the_first_seen_poll(monkeypatch):
     assert outputs == {"result": "pass", "failed": ""}
     # seen at 1000.5, then polls at 1031.0 (30.5 s) and 1061.5 (61.0 s > 60 s)
     assert now == 1061.5
+
+
+# --------------------------------------------------------------------------- restart after answers
+
+
+def _with_ids(comments):
+    return [{**comment, "id": 100 + index} for index, comment in enumerate(comments)]
+
+
+def _restart(labels, comments, *, pull_request=False):
+    """restart_target for the last comment of `comments` as trigger."""
+    comments = _with_ids(comments)
+    payload = {"labels": [{"name": name} for name in labels]}
+    if pull_request:
+        payload["pull_request"] = {}
+    return ops.restart_target(payload, comments, comments[-1]["id"], "owner", AGENTS)
+
+
+PLAN = {"agent:plan-ready"}
+BLOCKED = {"agent:ready", "agent:blocked"}
+
+
+def _two_questions_first_answered():
+    return [
+        _question_comment("Q1"),
+        _question_comment("Q2"),
+        _comment("owner", "Q1: yes"),
+    ]
+
+
+def test_restart_planner_when_last_question_answered():
+    comments = [*_two_questions_first_answered(), _comment("owner", "Q2: no")]
+    assert _restart(PLAN, comments) == "plan"
+
+
+def test_restart_implementer_when_last_question_answered():
+    comments = [*_two_questions_first_answered(), _comment("owner", "Q2: no")]
+    assert _restart(BLOCKED, comments) == "implement"
+
+
+def test_blocked_implementer_wins_over_leftover_plan_ready():
+    labels = {"agent:plan-ready", "agent:ready", "agent:blocked"}
+    comments = [*_two_questions_first_answered(), _comment("owner", "Q2: no")]
+    assert _restart(labels, comments) == "implement"
+
+
+def test_one_comment_answering_all_questions_restarts():
+    both = "> **Question Q1**\n\n> **Question Q2**\n\nok"
+    comments = [_question_comment("Q1"), _question_comment("Q2"), _comment("owner", both)]
+    assert _restart(PLAN, comments) == "plan"
+
+
+def test_no_restart_partial_answer():
+    assert _restart(PLAN, _two_questions_first_answered()) is None
+
+
+def test_no_restart_after_all_already_answered():
+    comments = [
+        _question_comment("Q1"),
+        _comment("owner", "Q1: yes"),
+        _comment("owner", "Q1: and also this"),
+    ]
+    assert _restart(PLAN, comments) is None
+    comments.append(_comment("owner", "unrelated"))
+    assert _restart(PLAN, comments) is None
+
+
+def test_no_restart_third_party_or_bot_comment():
+    base = [_question_comment("Q1")]
+    assert _restart(PLAN, [*base, _comment("stranger", "Q1: yes")]) is None
+    assert _restart(PLAN, [*base, _comment("github-actions[bot]", "Q1: yes", kind="Bot")]) is None
+
+
+def test_no_restart_unrelated_maintainer_comment():
+    comments = [_question_comment("Q1"), _comment("owner", "thanks, will look later")]
+    assert _restart(PLAN, comments) is None
+
+
+@pytest.mark.parametrize("labels", [PLAN, BLOCKED])
+def test_no_restart_while_in_progress(labels):
+    comments = [_question_comment("Q1"), _comment("owner", "Q1: yes")]
+    assert _restart(labels, comments) is not None
+    assert _restart({*labels, "agent:in-progress"}, comments) is None
+
+
+@pytest.mark.parametrize("labels", [PLAN, BLOCKED])
+def test_no_restart_when_stuck(labels):
+    comments = [_question_comment("Q1"), _comment("owner", "Q1: yes")]
+    assert _restart({*labels, "agent:stuck"}, comments) is None
+
+
+@pytest.mark.parametrize(
+    "labels", [set(), {"agent:blocked"}, {"agent:ready"}, {"agent:plan"}, {"agent:waiting"}]
+)
+def test_no_restart_without_asker_label(labels):
+    comments = [_question_comment("Q1"), _comment("owner", "Q1: yes")]
+    assert _restart(labels, comments) is None
+
+
+def test_no_restart_on_pull_request():
+    comments = [_question_comment("Q1"), _comment("owner", "Q1: yes")]
+    assert _restart(PLAN, comments, pull_request=True) is None
+
+
+def test_restart_only_counts_comments_up_to_trigger():
+    comments = _with_ids(
+        [
+            _question_comment("Q1"),
+            _comment("owner", "Q1: yes"),
+            _comment("owner", "Q1: still yes"),
+        ]
+    )
+    payload = {"labels": [{"name": "agent:plan-ready"}]}
+    assert ops.restart_target(payload, comments, comments[1]["id"], "owner", AGENTS) == "plan"
+    assert ops.restart_target(payload, comments, comments[2]["id"], "owner", AGENTS) is None
+
+
+def test_restart_ignores_unknown_trigger_and_questions_posted_later():
+    comments = _with_ids([_question_comment("Q1"), _comment("owner", "Q1: yes")])
+    payload = {"labels": [{"name": "agent:plan-ready"}]}
+    assert ops.restart_target(payload, comments, 999, "owner", AGENTS) is None
+    later = _with_ids([_comment("owner", "Q1: yes"), _question_comment("Q1")])
+    assert ops.restart_target(payload, later, later[0]["id"], "owner", AGENTS) is None
+
+
+@given(st.lists(st.sampled_from(["Q1: a", "Q2: b", "Q1: c", "hello", "Q3: x"]), max_size=8))
+def test_restart_fires_at_most_once_per_question_set(replies):
+    comments = _with_ids(
+        [_question_comment("Q1"), _question_comment("Q2")]
+        + [_comment("owner", reply) for reply in replies]
+    )
+    payload = {"labels": [{"name": "agent:plan-ready"}]}
+    fired = [
+        c["id"]
+        for c in comments
+        if ops.restart_target(payload, comments, c["id"], "owner", AGENTS) == "plan"
+    ]
+    assert len(fired) <= 1
+
+
+def test_select_startable_skips_blocked_even_if_ready():
+    for pending in ("agent:waiting", "agent:queued"):
+        candidates = [
+            issue(5, "agent:ready", "agent:blocked", pending),
+            issue(6, "agent:ready", pending),
+        ]
+        assert ops.select_startable(candidates, {}, free_slots=5) == [6]
+
+
+def test_cmd_restart_target_reports_target(monkeypatch, capsys):
+    comments = _with_ids([_question_comment("Q1"), _comment("owner", "Q1: yes")])
+    payload = {"labels": [{"name": "agent:plan-ready"}]}
+    monkeypatch.setenv("GITHUB_REPOSITORY", "o/r")
+    monkeypatch.setenv("MAINTAINER", "owner")
+    monkeypatch.setattr(ops, "agent_logins", lambda: AGENTS)
+
+    calls = []
+
+    def fake_gh_json(endpoint, *flags):
+        calls.append((endpoint, flags))
+        return comments if "/comments" in endpoint else payload
+
+    monkeypatch.setattr(ops, "gh_json", fake_gh_json)
+    assert ops.cmd_restart_target(Namespace(issue=7, comment=comments[1]["id"])) == 0
+    assert "target=plan" in capsys.readouterr().out
+    assert ops.cmd_restart_target(Namespace(issue=7, comment=comments[0]["id"])) == 0
+    assert capsys.readouterr().out.strip() == "target="
+    assert ("repos/o/r/issues/7/comments?per_page=100", ("--paginate",)) in calls
+
+
+def test_open_question_count_counts_each_open_question():
+    comments = [_question_comment("Q1"), _question_comment("Q2"), _comment("owner", "Q1: ok")]
+    assert ops.open_question_count(comments[:2], "owner", AGENTS) == 2
+    assert ops.open_question_count(comments, "owner", AGENTS) == 1
+
+
+def test_restart_without_labels_key_is_none():
+    comments = _with_ids([_question_comment("Q1"), _comment("owner", "Q1: yes")])
+    assert ops.restart_target({}, comments, comments[1]["id"], "owner", AGENTS) is None
