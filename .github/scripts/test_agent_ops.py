@@ -1330,7 +1330,10 @@ def test_cmd_restart_target_reports_target(monkeypatch, capsys):
     monkeypatch.setenv("MAINTAINER", "owner")
     monkeypatch.setattr(ops, "agent_logins", lambda: AGENTS)
 
-    def fake_gh_json(endpoint, *_flags):
+    calls = []
+
+    def fake_gh_json(endpoint, *flags):
+        calls.append((endpoint, flags))
         return comments if "/comments" in endpoint else payload
 
     monkeypatch.setattr(ops, "gh_json", fake_gh_json)
@@ -1338,3 +1341,15 @@ def test_cmd_restart_target_reports_target(monkeypatch, capsys):
     assert "target=plan" in capsys.readouterr().out
     assert ops.cmd_restart_target(Namespace(issue=7, comment=comments[0]["id"])) == 0
     assert capsys.readouterr().out.strip() == "target="
+    assert ("repos/o/r/issues/7/comments?per_page=100", ("--paginate",)) in calls
+
+
+def test_open_question_count_counts_each_open_question():
+    comments = [_question_comment("Q1"), _question_comment("Q2"), _comment("owner", "Q1: ok")]
+    assert ops.open_question_count(comments[:2], "owner", AGENTS) == 2
+    assert ops.open_question_count(comments, "owner", AGENTS) == 1
+
+
+def test_restart_without_labels_key_is_none():
+    comments = _with_ids([_question_comment("Q1"), _comment("owner", "Q1: yes")])
+    assert ops.restart_target({}, comments, comments[1]["id"], "owner", AGENTS) is None
