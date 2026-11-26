@@ -903,12 +903,61 @@ def cmd_pr_info(args) -> int:
     return 0
 
 
+RUN_LINK = re.compile(r"/actions/runs/(\d+)(?:/|$)")
+
+
+def failed_run_ids(checks: list[dict]) -> list[str]:
+    """Workflow run ids (from the check links) of failed or cancelled checks, sorted."""
+    ids: set[str] = set()
+    for check in checks:
+        match = RUN_LINK.search(check.get("link") or "")
+        if match and check["bucket"] in ("fail", "cancel"):
+            ids.add(match.group(1))
+    return sorted(ids)
+
+
+def run_attempt(run_id: str) -> object:
+    """Attempt number of a workflow run, or None if GitHub gave no usable answer.
+
+    Uses `check=False`: an API error here must not abort `wait-checks`.
+    """
+    answer = gh("api", f"repos/{repo()}/actions/runs/{run_id}", check=False)
+    try:
+        run = json.loads(answer)
+    except ValueError:
+        return None
+    return run.get("run_attempt") if isinstance(run, dict) else None
+
+
+def retry_first_attempts(run_ids: list[str], tried: set[str]) -> list[str]:
+    """Re-run the failed jobs of runs not retried yet; return the ids re-run.
+
+    A transient failure (e.g. a GitHub API error in a scanner) must not cost a fix
+    round; a real failure only costs one more CI run. Each run is tried once per call
+    site (`tried`), so a re-run that does not start cannot keep the caller waiting. If
+    the attempt cannot be read, the run is not re-run and its failure counts.
+    """
+    retried: list[str] = []
+    for run_id in run_ids:
+        if run_id in tried:
+            continue
+        tried.add(run_id)
+        if run_attempt(run_id) == 1:
+            gh("run", "rerun", run_id, "--failed", check=False)
+            retried.append(run_id)
+    return retried
+
+
 def cmd_wait_checks(args) -> int:
-    """Wait until all checks on the PR head finished; output result=pass|fail."""
+    """Wait until all checks on the PR head finished; output result=pass|fail.
+
+    Failed CI runs are re-run once (failed jobs only) before the result counts.
+    """
     deadline = time.time() + args.timeout * 60
     seen_any_at = None
+    tried: set[str] = set()
     while time.time() < deadline:
-        out = gh("pr", "checks", str(args.pr), "--json", "name,bucket,workflow", check=False)
+        out = gh("pr", "checks", str(args.pr), "--json", "name,bucket,workflow,link", check=False)
         checks = json.loads(out) if out.strip().startswith("[") else []
         pending = [c for c in checks if c["bucket"] == "pending"]
         failed = [c for c in checks if c["bucket"] in ("fail", "cancel")]
@@ -917,6 +966,9 @@ def cmd_wait_checks(args) -> int:
         # give late workflows a moment to register before trusting "nothing pending"
         settled = seen_any_at is not None and time.time() - seen_any_at > 60
         if checks and not pending and settled:
+            if failed and retry_first_attempts(failed_run_ids(failed), tried):
+                seen_any_at = None  # the re-run registers like a new push
+                continue
             names = ", ".join(f"{c['workflow']}/{c['name']}" for c in failed)
             set_output("result", "fail" if failed else "pass")
             set_output("failed", names)
@@ -960,7 +1012,11 @@ def mutation_report(sha: str) -> str:
                 return "# Evidence: mutation testing of the changed modules\n\n" + report.read_text(
                     encoding="utf-8"
                 )
-    return "# Evidence: mutation testing\n\n_No mutation report (no changed modules under flathunter/)._"
+    return (
+        "# Evidence: mutation testing\n\n"
+        "_No mutation report (no changed modules under flathunter/ "
+        "or scripts under .github/scripts/)._"
+    )
 
 
 def cmd_findings_context(args) -> int:

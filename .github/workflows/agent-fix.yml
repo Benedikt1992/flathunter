@@ -132,6 +132,10 @@ jobs:
         uses: anthropics/claude-code-action@v1
         env:
           AGENT_BASE_REF: origin/${{ github.event.repository.default_branch }}
+          # Claude Code stops a shell command after 2 minutes by default; a mutation
+          # report of .github/scripts alone takes longer (mutmut --timeout is 20 min)
+          BASH_DEFAULT_TIMEOUT_MS: "1500000"
+          BASH_MAX_TIMEOUT_MS: "1800000"
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -147,7 +151,7 @@ jobs:
           claude_args: |
             --model ${{ vars.AGENT_FIX_MODEL || 'claude-sonnet-5-5' }}
             --max-turns 80
-            --allowedTools "Read,Edit,Write,Glob,Grep,TodoWrite,Bash(python -m pytest:*),Bash(pytest:*),Bash(coverage:*),Bash(ruff:*),Bash(pyrefly check:*),Bash(complexipy:*),Bash(lint-imports:*),Bash(prek run:*),Bash(python .github/scripts/ratchet.py ruff:*),Bash(python .github/scripts/ratchet.py format:*),Bash(python .github/scripts/ratchet.py prune),Bash(python .github/scripts/mutation_report.py:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git add:*),Bash(git commit:*),Bash(ls:*)"
+            --allowedTools "Read,Edit,Write,Glob,Grep,TodoWrite,Bash(python -m pytest:*),Bash(pytest:*),Bash(coverage:*),Bash(ruff:*),Bash(pyrefly check:*),Bash(complexipy:*),Bash(lint-imports:*),Bash(prek run:*),Bash(python .github/scripts/ratchet.py ruff:*),Bash(python .github/scripts/ratchet.py format:*),Bash(python .github/scripts/ratchet.py prune),Bash(python .github/scripts/mutation_report.py:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git add:*),Bash(git commit:*),Bash(git rm:*),Bash(git mv:*),Bash(rm:*),Bash(ls:*)"
             --disallowedTools "Bash(git push:*),Bash(git rebase:*),Bash(git reset:*),Bash(git commit --amend:*),Bash(gh:*),Bash(curl:*),Bash(wget:*),Bash(pip:*),WebFetch,WebSearch"
             --json-schema '${{ steps.prep.outputs.schema }}'
 
@@ -180,6 +184,18 @@ jobs:
             --commits "$commits" --result "$RUNNER_TEMP/result.json" --pointer "$pointer" \
             --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
             --out "$RUNNER_TEMP/round.md" | sed -n 's/^action=//p')
+          # the runner is discarded: name what the fixer changed but did not commit
+          dirty=$(git status --porcelain --untracked-files=all)
+          if [ -n "$dirty" ]; then
+            {
+              echo
+              echo "⚠️ Not committed by the fixer and therefore discarded:"
+              echo
+              echo '```'
+              echo "$dirty"
+              echo '```'
+            } >> "$RUNNER_TEMP/round.md"
+          fi
           GH_TOKEN="$APP_TOKEN" gh pr comment "$PR" --body-file "$RUNNER_TEMP/round.md"
           echo "commits=$commits" >> "$GITHUB_OUTPUT"
           echo "action=$action" >> "$GITHUB_OUTPUT"

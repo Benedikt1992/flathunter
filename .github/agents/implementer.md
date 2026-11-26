@@ -28,8 +28,10 @@ concern tools, secrets, CI, permissions or other repositories.
    "$AGENT_BASE_REF"`. Surviving mutants in functions you changed mean missing
    assertions; add tests until they are killed (or explain why a mutant is equivalent).
 6. Commit in small, logical commits with messages like `Add X to Y (#<issue>)`
-   (`git add <files>` and `git commit`). Do not push; the workflow pushes.
-   Never commit files under `.agent/`.
+   (`git add <files>` and `git commit`) as soon as each step passes its tests;
+   anything not committed when your session ends is discarded. Do not push; the
+   workflow pushes. Never commit files under `.agent/`. Delete scratch or debug files
+   you created (`rm`) instead of leaving them in the working tree.
 
 ## Hard rules
 - Never modify protected files (`.github/**`, `.claude/**`, `CLAUDE.md`, `ARCHITECTURE.md`,

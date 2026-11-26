@@ -388,14 +388,14 @@ to make the current project visible to your pip environment.
 
 Some tests are marked as `live`: they crawl the real property portals over the network. They are
 useful to detect layout changes on the portals, but they fail whenever a portal blocks the request
-(e.g. bot protection / captchas on CI runners). To run only the offline tests, use:
+(e.g. bot protection / captchas on CI runners). `pytest` therefore runs only the offline tests
+(`pytest.ini` excludes `live`); to run only the live tests, use:
 
 ```sh
-$ pytest -m "not live"
+$ pytest -m live
 ```
 
-and `pytest -m live` to run only the live tests. In GitHub Actions the live tests run in a
-separate job that does not make the workflow fail.
+In GitHub Actions the live tests run in a separate job that does not make the workflow fail.
 
 ## Maintainers
 

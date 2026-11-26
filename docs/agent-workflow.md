@@ -14,7 +14,7 @@ Issue ──(maintainer: agent:plan)──► Planner ──► plan comment ─
         ▼
    CI gates  (tests · diff coverage · prek: ruff/pyrefly/complexipy/import-linter/deptry
               · agent guard · mutation report · pip-audit diff · gitleaks · CodeQL)
-        ├─ red ──► Fixer (mode=ci) ─────────────────────────┐
+        ├─ red (after one re-run) ──► Fixer (mode=ci) ──────┐
         ▼ green                                             │
    Independent reviewer (github-actions[bot], read-only)    │
         ├─ changes requested ──► Fixer (mode=review) ───────┤  max AGENT_MAX_ROUNDS
@@ -259,6 +259,25 @@ via repository variables. Failed fixer runs without commits do not use up `AGENT
   `<!-- agent-fix-round mode=… failed -->`). A failed run that produced commits still counts,
   so a repeating loop is stopped. To restart: fix the cause, then request changes in a
   review or re-dispatch `agent-fix.yml`.
+- **"Not committed by the fixer and therefore discarded" in a fix round comment**: the
+  fixer changed files but did not commit them, and the runner is gone. The fixer and the
+  implementer are told to commit each step once its tests pass and to delete their
+  scratch files (they may run `rm`, `git rm` and `git mv`). Their shell commands may run
+  for up to 25 minutes (`BASH_DEFAULT_TIMEOUT_MS`; Claude Code's default is 2), enough for
+  `mutation_report.py`. `.github/scripts/test_workflow_agent_shell.py` checks both settings.
+  Re-request the missing points in a review.
+- **A CI job failed for a reason outside the PR** (e.g. a GitHub API error in a
+  scanner): before the review hands red CI to the fixer, `agent_ops.py wait-checks`
+  re-runs the failed jobs of each failed run once (only runs still at attempt 1). Only a
+  failure that repeats costs a fix round. If GitHub does not say which attempt a run is
+  at, the run is not re-run and its failure goes to the fixer as before.
+- **"Warning: mutmut failed …" in the mutation report**: mutmut did not finish (e.g. a
+  mutmut version that does not work with the installed pytest), so the numbers are not
+  meaningful. The warning quotes mutmut's last output line; run
+  `python .github/scripts/mutation_report.py --base origin/fork-main` locally for the full
+  output. A timeout, or tests that still fail in mutmut's sandbox after three attempts, are
+  reported the same way. Tests that already fail before any mutation are not a warning: they
+  are deselected and counted (`_N test(s) failing before mutation were deselected._`).
 - **Push failed / work saved as artifact**: both workflows push with
   `python3 .github/scripts/agent_ops.py push-branch <branch>` (at most 4 attempts, waits of 5, 15
   and 45 s; if the remote branch moved it is fetched and merged with `git merge --no-edit`,
