@@ -230,3 +230,251 @@ def test_push_to_new_branch_works(repos):
     assert ops.push_branch("fresh", str(bare), run=_runner(clones["b"]), sleep=no_sleep)
     head = _git_in(clones["b"], "rev-parse", "HEAD")
     assert _git_in(bare, "rev-parse", "refs/heads/fresh") == head
+
+
+# GitHub refuses an app's push of a new branch whose workflow files differ from the default
+# branch, even if the agent's commits do not touch them (the base moved meanwhile).
+
+REFUSAL = (
+    " ! [remote rejected] HEAD -> b (refusing to allow a GitHub App to create or update"
+    " workflow `.github/workflows/agent-fix.yml` without `workflows` permission)"
+)
+
+REFUSAL_GIVE_UP = "GitHub refused workflow files and replaying on the base did not help; giving up"
+
+# Models GitHub for the agent: a new branch is compared with main, an update with its old
+# head. Pushes to main stand for the maintainer, who may change workflows.
+WORKFLOW_HOOK = """#!/bin/sh
+zero=0000000000000000000000000000000000000000
+while read -r old new ref; do
+  [ "$ref" = refs/heads/main ] && continue
+  from=$old; [ "$old" = "$zero" ] && from=refs/heads/main
+  files=$(git diff --name-only "$from" "$new" -- .github/workflows)
+  if [ -n "$files" ]; then
+    first=$(echo "$files" | head -n 1)
+    echo "refusing to allow a GitHub App to create or update workflow \\`$first\\` without \\`workflows\\` permission" >&2
+    exit 1
+  fi
+done
+"""
+
+
+@pytest.fixture
+def github(tmp_path, monkeypatch):
+    """Remote whose main changed a workflow after the agent branched off (base: main)."""
+    monkeypatch.setenv("DEFAULT_BRANCH", "main")
+    bare = tmp_path / "remote.git"
+    _git_in(tmp_path, "init", "--bare", "-b", "main", str(bare))
+    clones = {}
+    for name in ("maint", "agent"):
+        clones[name] = tmp_path / name
+        _git_in(tmp_path, "clone", "-q", str(bare), str(clones[name]))
+        _git_in(clones[name], "config", "user.email", name + "@example.org")
+        _git_in(clones[name], "config", "user.name", name)
+        if name == "maint":
+            (clones[name] / ".github" / "workflows").mkdir(parents=True)
+            _commit(clones[name], ".github/workflows/ci.yml", "old\n", "base")
+            _commit(clones[name], "app.txt", "app\n", "app")
+            _git_in(clones[name], "push", "-q", "origin", "HEAD:refs/heads/main")
+    _git_in(clones["agent"], "checkout", "-q", "-b", "agent/issue-1")
+    _commit(clones["maint"], ".github/workflows/ci.yml", "new\n", "maintainer changes a workflow")
+    _git_in(clones["maint"], "push", "-q", "origin", "HEAD:refs/heads/main")
+    hook = bare / "hooks" / "pre-receive"
+    hook.write_text(WORKFLOW_HOOK)
+    hook.chmod(0o755)
+    return bare, clones
+
+
+def _recording(path, calls):
+    def run(*args):
+        calls.append(args)
+        return ops._git(*args, cwd=str(path))
+
+    return run
+
+
+def _remote_heads(bare):
+    return _git_in(bare, "for-each-ref", "--format=%(refname)", "refs/heads").splitlines()
+
+
+def test_new_branch_is_replayed_on_the_moved_base_when_workflows_are_refused(github):
+    bare, clones = github
+    agent = clones["agent"]
+    _commit(agent, "feature.txt", "feature\n", "agent work")
+    # the workflow patch stays uncommitted, as the prompts ask (one file intent-to-add)
+    (agent / ".github" / "workflows" / "ci.yml").write_text("agent patch\n")
+    (agent / ".github" / "workflows" / "new.yml").write_text("new\n")
+    _git_in(agent, "add", "-N", ".github/workflows/new.yml")
+    calls, sleeps = [], []
+
+    pushed = ops.push_branch(
+        "agent/issue-1", str(bare), run=_recording(agent, calls), sleep=sleeps.append
+    )
+
+    assert pushed
+    head = _git_in(bare, "rev-parse", "refs/heads/agent/issue-1")
+    assert _git_in(bare, "rev-parse", head + "^") == _git_in(bare, "rev-parse", "refs/heads/main")
+    assert _git_in(bare, "show", head + ":feature.txt") == "feature"
+    assert _git_in(bare, "show", head + ":.github/workflows/ci.yml") == "new"
+    assert _git_in(bare, "log", "-1", "--format=%an|%s", head) == "agent|agent work"
+    assert _git_in(agent, "rev-parse", "HEAD") == head  # HEAD names the pushed commit
+    assert _git_in(agent, "symbolic-ref", "HEAD") == "refs/heads/agent/issue-1"
+    assert (agent / ".github" / "workflows" / "ci.yml").read_text() == "agent patch\n"
+    assert (agent / ".github" / "workflows" / "new.yml").read_text() == "new\n"
+    assert len(_git_in(agent, "worktree", "list").splitlines()) == 1  # scratch worktree removed
+    assert [c for c in calls if c[0] == "push"] == [
+        ("push", str(bare), "HEAD:refs/heads/agent/issue-1"),
+        ("push", str(bare), head + ":refs/heads/agent/issue-1"),
+    ]
+    assert sleeps == []
+    flat = [part for call in calls for part in call]
+    for forbidden in ("--force", "-f", "--force-with-lease", "rebase", "reset"):
+        assert forbidden not in flat
+
+
+def test_workflow_refusal_without_a_base_gives_up_at_once(github, monkeypatch, capsys):
+    bare, clones = github
+    monkeypatch.delenv("DEFAULT_BRANCH")
+    _commit(clones["agent"], "feature.txt", "feature\n", "agent work")
+    head = _git_in(clones["agent"], "rev-parse", "HEAD")
+    calls, sleeps = [], []
+
+    assert not ops.push_branch(
+        "agent/issue-1", str(bare), run=_recording(clones["agent"], calls), sleep=sleeps.append
+    )
+
+    assert [c[0] for c in calls] == ["push"]  # retrying cannot help
+    assert sleeps == []
+    assert _remote_heads(bare) == ["refs/heads/main"]
+    assert _git_in(clones["agent"], "rev-parse", "HEAD") == head
+    out = capsys.readouterr().out
+    assert out.startswith("push attempt 1/4 failed: ")
+    assert "push attempt 2/4" not in out
+    assert out.splitlines()[-1] == REFUSAL_GIVE_UP
+
+
+def test_replay_is_tried_once_when_the_commits_change_a_workflow_themselves(github, capsys):
+    bare, clones = github
+    agent = clones["agent"]
+    _commit(agent, "feature.txt", "feature\n", "agent work")
+    _commit(agent, ".github/workflows/own.yml", "own\n", "agent commits a workflow")
+    head = _git_in(agent, "rev-parse", "HEAD")
+    calls, sleeps = [], []
+
+    assert not ops.push_branch(
+        "agent/issue-1", str(bare), run=_recording(agent, calls), sleep=sleeps.append
+    )
+
+    assert len([c for c in calls if c[0] == "push"]) == 2
+    assert len([c for c in calls if "cherry-pick" in c]) == 1
+    assert sleeps == []
+    assert _remote_heads(bare) == ["refs/heads/main"]
+    assert _git_in(agent, "rev-parse", "HEAD") == head  # unpushed work stays as it was
+    assert len(_git_in(agent, "worktree", "list").splitlines()) == 1
+    assert REFUSAL_GIVE_UP in capsys.readouterr().out.splitlines()
+
+
+def test_replay_conflict_gives_up_and_leaves_head_alone(github):
+    bare, clones = github
+    _commit(clones["maint"], "app.txt", "maintainer\n", "maintainer edits app")
+    _git_in(clones["maint"], "push", "-q", "origin", "HEAD:refs/heads/main")
+    agent = clones["agent"]
+    _commit(agent, "app.txt", "agent\n", "agent edits app")
+    head = _git_in(agent, "rev-parse", "HEAD")
+    calls, sleeps = [], []
+
+    assert not ops.push_branch(
+        "agent/issue-1", str(bare), run=_recording(agent, calls), sleep=sleeps.append
+    )
+
+    assert len([c for c in calls if c[0] == "push"]) == 1
+    assert sleeps == []
+    assert _remote_heads(bare) == ["refs/heads/main"]
+    assert _git_in(agent, "rev-parse", "HEAD") == head
+    assert _git_in(agent, "status", "--porcelain") == ""
+    assert len(_git_in(agent, "worktree", "list").splitlines()) == 1
+
+
+@pytest.mark.parametrize("ls_remote", [(0, "abc\trefs/heads/b\n", ""), (128, "", "fatal")])
+def test_existing_or_unknown_remote_branch_is_never_replayed(monkeypatch, ls_remote):
+    # an existing branch would need a force push; an unknown answer is not trusted
+    monkeypatch.setenv("DEFAULT_BRANCH", "main")
+    git = FakeGit([(1, "", REFUSAL)], other={"ls-remote": ls_remote})
+    sleeps = []
+    assert not ops.push_branch("b", "url", run=git, sleep=sleeps.append)
+    assert git.calls == [
+        ("push", "url", "HEAD:refs/heads/b"),
+        ("ls-remote", "--exit-code", "url", "refs/heads/b"),
+    ]
+    assert sleeps == []
+
+
+def test_replay_gives_up_if_the_base_cannot_be_fetched(monkeypatch):
+    monkeypatch.setenv("DEFAULT_BRANCH", "fork-main")
+    git = FakeGit([(1, "", REFUSAL)], other={"ls-remote": (2, "", ""), "fetch": (128, "", "x")})
+    assert not ops.push_branch("b", "url", run=git, sleep=no_sleep)
+    assert git.calls[1:] == [
+        ("ls-remote", "--exit-code", "url", "refs/heads/b"),
+        ("fetch", "url", "refs/heads/fork-main"),
+    ]
+
+
+def test_replay_gives_up_if_the_scratch_worktree_cannot_be_added(monkeypatch):
+    monkeypatch.setenv("DEFAULT_BRANCH", "main")
+    git = FakeGit(
+        [(1, "", REFUSAL)],
+        other={"ls-remote": (2, "", ""), "rev-parse": (0, "abc\n", ""), "worktree": (1, "", "x")},
+    )
+    assert not ops.push_branch("b", "url", run=git, sleep=no_sleep)
+    assert not any("cherry-pick" in call for call in git.calls)
+    assert len(git.pushes_made()) == 1
+
+
+def test_cmd_push_branch_replays_on_the_default_branch(github, monkeypatch):
+    bare, clones = github
+    _commit(clones["agent"], "feature.txt", "feature\n", "agent work")
+    real_git = ops._git
+    monkeypatch.setattr(ops, "_git", lambda *args: real_git(*args, cwd=str(clones["agent"])))
+    monkeypatch.setenv("APP_TOKEN", "")
+    code = ops.cmd_push_branch(argparse.Namespace(branch="agent/issue-1", remote=str(bare)))
+    assert code == 0
+    assert _git_in(bare, "rev-parse", "refs/heads/agent/issue-1^") == _git_in(
+        bare, "rev-parse", "refs/heads/main"
+    )
+
+
+def test_default_branch_comes_from_the_workflow_env(monkeypatch):
+    monkeypatch.delenv("DEFAULT_BRANCH", raising=False)
+    assert ops.default_branch() == ""
+    monkeypatch.setenv("DEFAULT_BRANCH", "fork-main")
+    assert ops.default_branch() == "fork-main"
+
+
+def test_plain_push_makes_no_other_git_call():
+    git = FakeGit([(0, "", "")])
+    assert ops.push_branch("b", "url", run=git, sleep=no_sleep) is True
+    assert git.calls == [("push", "url", "HEAD:refs/heads/b")]
+
+
+def test_moved_remote_branch_is_merged_without_waiting():
+    git = FakeGit([(1, "", " ! [rejected] HEAD -> b (fetch first)"), (0, "", "")])
+    sleeps = []
+    assert ops.push_branch("b", "url", run=git, sleep=sleeps.append)
+    assert sleeps == []
+    assert git.pushes_made() == [("push", "url", "HEAD:refs/heads/b")] * 2
+
+
+def test_unmergeable_remote_branch_says_why(capsys):
+    git = FakeGit([(1, "", "non-fast-forward")], other={"merge": (1, "", "conflict")})
+    assert ops.push_branch("b", "url", run=git, sleep=no_sleep) is False
+    lines = capsys.readouterr().out.splitlines()
+    assert lines == [
+        "push attempt 1/4 failed: non-fast-forward",
+        "remote branch moved and could not be merged; giving up",
+    ]
+
+
+def test_failed_push_returns_false_and_prints_errors_unchanged_without_token(capsys):
+    git = FakeGit([(1, "", "XXXX")] * 4)
+    assert ops.push_branch("b", "url", run=git, sleep=no_sleep) is False
+    assert "push attempt 4/4 failed: XXXX" in capsys.readouterr().out.splitlines()
