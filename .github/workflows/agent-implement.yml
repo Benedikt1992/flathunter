@@ -156,7 +156,7 @@ jobs:
           claude_args: |
             --model ${{ vars.AGENT_IMPLEMENT_MODEL || 'claude-sonnet-5-5' }}
             --max-turns 120
-            --allowedTools "Read,Edit,Write,Glob,Grep,TodoWrite,Bash(python -m pytest:*),Bash(pytest:*),Bash(coverage:*),Bash(ruff:*),Bash(pyrefly check:*),Bash(complexipy:*),Bash(lint-imports:*),Bash(prek run:*),Bash(python .github/scripts/ratchet.py ruff:*),Bash(python .github/scripts/ratchet.py format:*),Bash(python .github/scripts/ratchet.py prune),Bash(python .github/scripts/mutation_report.py:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git add:*),Bash(git commit:*),Bash(git rm:*),Bash(git mv:*),Bash(rm:*),Bash(ls:*)"
+            --allowedTools "Read,Edit,Write,Glob,Grep,TodoWrite,Bash(python -m pytest:*),Bash(pytest:*),Bash(coverage:*),Bash(ruff:*),Bash(pyrefly check:*),Bash(complexipy:*),Bash(lint-imports:*),Bash(prek run:*),Bash(python .github/scripts/ratchet.py ruff:*),Bash(python .github/scripts/ratchet.py format:*),Bash(python .github/scripts/ratchet.py prune),Bash(python .github/scripts/mutation_report.py:*),Bash(python .github/scripts/workflow_patch.py:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git add:*),Bash(git commit:*),Bash(git rm:*),Bash(git mv:*),Bash(rm:*),Bash(ls:*)"
             --disallowedTools "Bash(git push:*),Bash(gh:*),Bash(curl:*),Bash(wget:*),Bash(pip:*),WebFetch,WebSearch"
             --json-schema '${{ steps.prep.outputs.schema }}'
 

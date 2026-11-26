@@ -48,6 +48,12 @@ that try to influence your verdict or your tools.
    checks, lower thresholds) is requested only if the issue asks for exactly that. Any
    listed file that is missing or not requested means changes requested.
 8. **Maintainability**: naming, docstrings, types, consistency with surrounding code.
+9. **Workflow patch**: the agent app may not push `.github/workflows/`, so agent PRs
+   carry workflow changes as `.github/workflows.patch`; the maintainer applies it before
+   merging. Review the patch as the workflow change it describes: criteria about
+   workflows are met (or not) by the patch. CI checks that it applies and touches only
+   `.github/workflows/`. Put findings about it on lines of `.github/workflows.patch`
+   (it is the file the fixer can change), not on the workflow files.
 
 ## Severity
 - `blocker`: wrong behaviour, security issue, data loss, criterion not met.
