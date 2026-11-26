@@ -305,9 +305,15 @@ def questions_pointer(count: int, phase: str) -> str:
     return f"{count} {noun}, {where}."
 
 
-def blocked_footer(count: int, run_url: str) -> str:
-    """Closing line of the implementer's blocked comment, depending on open questions."""
+def blocked_footer(count: int, run_url: str, status: str = "blocked") -> str:
+    """Closing line of the implementer's blocked comment.
+
+    Only a `blocked` run keeps `agent:ready` and restarts automatically after the last
+    answer; any other status ends as `agent:stuck` with `agent:ready` removed.
+    """
     link = f"[Run log]({run_url})"
+    if status != "blocked":
+        return f"Re-add `agent:ready` to retry. {link}"
     if count <= 0:
         return f"Remove and re-add `agent:ready` to retry. {link}"
     return (
@@ -1375,7 +1381,8 @@ def cmd_questions_pointer(args: argparse.Namespace) -> int:
 def cmd_blocked_footer(args: argparse.Namespace) -> int:
     """Output footer=<one line> for the implementer's blocked comment."""
     result = json.loads(Path(args.result).read_text(encoding="utf-8"))
-    set_output("footer", blocked_footer(len(question_entries(result)), args.run_url))
+    status = str(result.get("status") or "failed")
+    set_output("footer", blocked_footer(len(question_entries(result)), args.run_url, status))
     return 0
 
 

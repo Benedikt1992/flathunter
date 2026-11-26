@@ -880,12 +880,28 @@ def test_blocked_footer_command_uses_valid_entries(tmp_path, capsys):
     result = tmp_path / "r.json"
     url = "https://x/run/1"
     args = ops.argparse.Namespace(result=str(result), run_url=url)
-    result.write_text('{"open_questions": [{"question": "A?"}, {"question": ""}]}')
+    result.write_text(
+        '{"status": "blocked", "open_questions": [{"question": "A?"}, {"question": ""}]}'
+    )
     assert ops.cmd_blocked_footer(args) == 0
     assert capsys.readouterr().out == "footer=" + ops.blocked_footer(1, url) + "\n"
-    result.write_text("{}")
+    result.write_text('{"status": "blocked"}')
     assert ops.cmd_blocked_footer(args) == 0
     assert capsys.readouterr().out == "footer=" + ops.blocked_footer(0, url) + "\n"
+    result.write_text('{"status": "failed", "open_questions": [{"question": "A?"}]}')
+    assert ops.cmd_blocked_footer(args) == 0
+    assert capsys.readouterr().out == "footer=" + ops.blocked_footer(1, url, "failed") + "\n"
+    result.write_text("{}")
+    assert ops.cmd_blocked_footer(args) == 0
+    assert capsys.readouterr().out == "footer=" + ops.blocked_footer(0, url, "failed") + "\n"
+
+
+def test_blocked_footer_for_stuck_run_promises_no_restart():
+    for count in (0, 2):
+        footer = ops.blocked_footer(count, "https://x/run/1", "failed")
+        assert footer == "Re-add `agent:ready` to retry. [Run log](https://x/run/1)"
+        assert "automatically" not in footer
+        assert "Remove" not in footer
 
 
 RUN_URL = "https://github.com/o/r/actions/runs/7"
