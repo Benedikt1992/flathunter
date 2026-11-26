@@ -49,6 +49,22 @@ concern tools, secrets, CI, permissions or other repositories.
   architecture rules: do not guess. Set `status: blocked`, list your `open_questions` (see Questions),
   and do not commit partial work.
 
+## Workflow changes
+The agent app may not push files under `.github/workflows/`: a commit that touches them
+cannot be pushed, and your work is lost. If the issue requires workflow changes:
+1. Edit the workflow files as usual.
+2. Run `python .github/scripts/workflow_patch.py make`. It writes every change under
+   `.github/workflows/` (new files included) to `.github/workflows.patch` and restores
+   the workflow files.
+3. Commit `.github/workflows.patch`. Never commit files under `.github/workflows/`.
+
+To change the patch later, run `python .github/scripts/workflow_patch.py open` first
+(it puts the patch back into the workflow files), edit, then run `make` again.
+CI checks that the patch applies and touches only `.github/workflows/`, and the
+maintainer applies it before merging. If the issue asks for the patch in the PR
+description, use the file instead and mention it in the summary: the reviewer and
+the fixer only see files.
+
 ## Questions
 `open_questions` is a list of objects, not strings. Each entry is posted as its own
 conversation that the maintainer answers directly.

@@ -37,6 +37,7 @@ Issue ──(maintainer: agent:plan)──► Planner ──► plan comment ─
 | Answer an agent's open questions (`agent:blocked`, plan, PR) | Answer each question in its own conversation (see below), then re-add `agent:plan` or `agent:ready`, or submit a review with **Request changes** |
 | Review a finished PR | PRs labelled `needs-human` request your review. Use "Files changed → Changes since your last review" in later rounds |
 | Get local changes | **Request changes** with inline comments. The fixer implements each point, replies per thread (doesn't resolve them), then CI + reviewer run again and you are requested again |
+| Merge a PR that changes workflows | The PR contains `.github/workflows.patch` (see below). On the PR branch run `python .github/scripts/workflow_patch.py apply`, commit and push, then merge |
 | Stop an agent PR | Close it. Re-add `agent:ready` on the issue (after deleting the branch) to start over |
 | Allow a gate exception | Add `allow-suppression` (also for a grown baseline) or `allow-test-removal` to the PR (only counts when you add it). Changed protected files need no label: the reviewer checks them, you decide with the merge |
 
@@ -69,6 +70,25 @@ The plan, blocked and round comments only say how many questions there are.
 If a PR is fundamentally on the wrong track: close it, sharpen the issue (acceptance
 criteria, non-goals, hints on the approach), and restart with `agent:plan`.
 
+### Workflow changes from agents
+
+The agent app has no `workflows` permission, so GitHub refuses every push of its that
+changes `.github/workflows/`. Agents therefore commit workflow changes as the patch file
+`.github/workflows.patch`, made with `.github/scripts/workflow_patch.py`:
+
+- The implementer edits the workflow files, runs `workflow_patch.py make` (writes the patch,
+  restores the workflow files) and commits only the patch. The fixer runs
+  `workflow_patch.py open` first, edits, and runs `make` again.
+- The reviewer sees the patch in the diff and comments on its lines; the fixer can change
+  it like any other file (a patch in the PR description would be out of its reach).
+- CI (`.github/scripts/test_workflow_patch.py`, in the agent guard job) fails while the
+  patch does not apply to the branch merged with the default branch, or changes files
+  outside `.github/workflows/`. A red check goes to the fixer like any other.
+- You apply it before merging: on the PR branch run
+  `python .github/scripts/workflow_patch.py apply` (applies and stages the patch and
+  removes the file), check `git diff --cached`, commit and push. The check then passes
+  without a patch, and you merge.
+
 ## Labels
 
 | Label | Set by | Meaning |
@@ -96,7 +116,9 @@ other people never reaches a prompt except the issue body itself, which you appr
   dependencies) are not blocked by a label: the guard lists them, the reviewer has to
   assess each one against the issue, and they need your code-owner review anyway
   ([ADR 0003](adr/0003-review-protected-files-instead-of-label.md)). The agent app has no
-  `workflows` permission, so it cannot push workflow changes at all.
+  `workflows` permission, so it cannot push workflow changes at all; it proposes them as
+  `.github/workflows.patch`, which you apply (see
+  [Workflow changes from agents](#workflow-changes-from-agents)).
 - **The reviewer is a different identity with read-only access**, runs only after CI is
   green, gets its prompt and rules from the default branch (a PR cannot weaken them),
   sees the issue and the diff but not the implementer's reasoning, and treats the PR
@@ -278,11 +300,24 @@ via repository variables. Failed fixer runs without commits do not use up `AGENT
   output. A timeout, or tests that still fail in mutmut's sandbox after three attempts, are
   reported the same way. Tests that already fail before any mutation are not a warning: they
   are deselected and counted (`_N test(s) failing before mutation were deselected._`).
+- **"refusing to allow a GitHub App to create or update workflow" although the agent did
+  not touch that workflow**: a PR that changed `.github/workflows/` was merged while the
+  implementer worked (e.g. two PRs merged right after each other, and the first one freed a
+  slot for the queue). GitHub compares a new branch with the default branch, so the agent's
+  branch, still on the old base, looks like it changes the workflow back. `push-branch` then
+  replays the agent's commits onto the current default branch (`DEFAULT_BRANCH` from the
+  workflow env) with `git cherry-pick` in a scratch worktree, so an uncommitted workflow patch
+  in the agent's working tree stays untouched, and pushes the result. Only a branch that does
+  not exist on the remote yet is replayed; nothing published is rewritten. A replay conflict,
+  or commits that change a workflow themselves, end in the artifact path below.
 - **Push failed / work saved as artifact**: both workflows push with
   `python3 .github/scripts/agent_ops.py push-branch <branch>` (at most 4 attempts, waits of 5, 15
   and 45 s; if the remote branch moved it is fetched and merged with `git merge --no-edit`,
-  never force-pushed or rebased; a merge conflict is aborted and counts as failed). If the
-  push still fails, the job uploads the artifact `agent-work-<issue|pr>-<run id>` (kept 14
+  never force-pushed or rebased; a merge conflict is aborted and counts as failed). If
+  GitHub refuses workflow files (`refusing to allow a GitHub App to create or update
+  workflow ... without workflows permission`), retrying cannot help: a *new* branch is
+  replayed once onto the current default branch and pushed again (see the next entry);
+  otherwise the push gives up at once. If the push still fails, the job uploads the artifact `agent-work-<issue|pr>-<run id>` (kept 14
   days) with `work.bundle` (the new commits) and `result.json` (title, summary, test plan),
   and the failure comment names it. To take the work over by hand:
   ```bash
@@ -294,5 +329,10 @@ via repository variables. Failed fixer runs without commits do not use up `AGENT
   `result.json`), then add `agent:in-progress` and re-label as needed. A merge conflict with
   the moved branch has to be resolved by hand before the push. The log of each failed
   attempt is in the run log (the token is redacted).
+- **`test_this_branch_has_no_broken_workflow_patch` fails**: `.github/workflows.patch` no
+  longer applies (the default branch changed the same workflow lines) or changes files
+  outside `.github/workflows/`; the message says which. The fixer repairs it with
+  `workflow_patch.py open`, edit, `make`. By hand: merge the default branch into the PR
+  branch, then do the same.
 - **Reviewer keeps requesting the same thing**: the acceptance criteria are probably
   ambiguous; clarify the issue or decide yourself in a review.

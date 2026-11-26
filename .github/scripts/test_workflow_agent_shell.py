@@ -1,8 +1,9 @@
 """Guard the shell of the agents that change code (implementer and fixer).
 
-They must be able to delete files (scratch files, files the issue removes) and to run
+They must be able to delete files (scratch files, files the issue removes), to run
 the mutation report, which takes longer than Claude Code's default limit of 2 minutes
-per shell command. Run with `python -m pytest .github/scripts`.
+per shell command, and to turn workflow edits into `.github/workflows.patch` (the agent
+app may not push workflow files). Run with `python -m pytest .github/scripts`.
 """
 
 import re
@@ -36,6 +37,12 @@ def test_writing_agents_may_delete_files() -> None:
         allowed = tools.split(",")
         for tool in ("Bash(rm:*)", "Bash(git rm:*)", "Bash(git mv:*)", "Bash(git commit:*)"):
             assert tool in allowed, f"{name}: {tool} missing"
+
+
+def test_writing_agents_may_turn_workflow_edits_into_the_patch() -> None:
+    for name in WRITERS:
+        (tools,) = TOOLS.findall("\n".join(_step(name)))
+        assert "Bash(python .github/scripts/workflow_patch.py:*)" in tools.split(","), name
 
 
 def test_writing_agents_can_wait_for_the_mutation_report() -> None:

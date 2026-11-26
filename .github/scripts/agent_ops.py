@@ -130,6 +130,8 @@ def set_output(name: str, value: str) -> None:
 PUSH_DELAYS = (5, 15, 45)
 GIT_TIMEOUT = 120
 NON_FAST_FORWARD_HINTS = ("non-fast-forward", "fetch first", "[rejected]")
+WORKFLOW_REFUSAL_HINT = "refusing to allow a GitHub App to create or update workflow"
+LS_REMOTE_MISSING = 2  # exit code of `git ls-remote --exit-code` when the ref does not exist
 DEFAULT_COMMITTER_EMAIL = "agent@users.noreply.github.com"
 
 
@@ -183,6 +185,80 @@ def sync_with_remote(
     return False
 
 
+def default_branch() -> str:
+    """Base branch of the agent workflows (`DEFAULT_BRANCH` in their env; "" if unset)."""
+    return os.environ.get("DEFAULT_BRANCH", "")
+
+
+def _cherry_pick(
+    work: str, commits: str, run: Callable[..., subprocess.CompletedProcess[str]]
+) -> str:
+    """Cherry-pick `commits` in the worktree `work`; return its new HEAD ("" on a conflict)."""
+    if run("-C", work, "cherry-pick", commits).returncode != 0:
+        return ""
+    return run("-C", work, "rev-parse", "HEAD").stdout.strip()
+
+
+def replay_on_base(
+    branch: str, base: str, url: str, run: Callable[..., subprocess.CompletedProcess[str]]
+) -> str:
+    """Replay the local commits on the remote `base`; return the new commit ("" if not possible).
+
+    GitHub refuses an app's push of a new branch whose workflow files differ from the
+    default branch, even if its commits do not touch them: a PR that changed a workflow was
+    merged while the agent worked. The commits were never pushed, so replaying them rewrites
+    nothing published. Only a branch the remote does not have yet is replayed (anything else
+    would need a force push). The replay runs in a scratch worktree, so the agent's working
+    tree, which may hold an uncommitted workflow patch, stays as it is. A conflict gives up.
+    """
+    if not base:
+        return ""
+    exists = run("ls-remote", "--exit-code", url, f"refs/heads/{branch}")
+    if exists.returncode != LS_REMOTE_MISSING:
+        return ""
+    if run("fetch", url, f"refs/heads/{base}").returncode != 0:
+        return ""
+    head = run("rev-parse", "HEAD").stdout.strip()
+    onto = run("rev-parse", "FETCH_HEAD").stdout.strip()
+    _ensure_identity(run)
+    with tempfile.TemporaryDirectory() as tmp:
+        work = str(Path(tmp) / "replay")
+        if run("worktree", "add", "--detach", work, onto).returncode != 0:
+            return ""
+        replayed = _cherry_pick(work, f"{onto}..{head}", run)
+    run("worktree", "prune")  # the scratch worktree's directory is gone
+    return replayed
+
+
+def _next_push(
+    stderr: str,
+    branch: str,
+    url: str,
+    source: str,
+    run: Callable[..., subprocess.CompletedProcess[str]],
+) -> tuple[str, bool] | None:
+    """After a failed push: what to push next and whether to wait first (None: give up)."""
+    if WORKFLOW_REFUSAL_HINT in stderr:
+        replayed = replay_on_base(branch, default_branch(), url, run) if source == "HEAD" else ""
+        if replayed:
+            return replayed, False
+        print("GitHub refused workflow files and replaying on the base did not help; giving up")
+        return None
+    if _is_non_fast_forward(stderr):
+        if source == "HEAD" and sync_with_remote(branch, url, run):
+            return source, False
+        print("remote branch moved and could not be merged; giving up")
+        return None
+    return source, True
+
+
+def _adopt(source: str, run: Callable[..., subprocess.CompletedProcess[str]]) -> bool:
+    """After pushing a replayed commit, let HEAD name it (index and working tree stay)."""
+    if source != "HEAD":
+        run("update-ref", "HEAD", source)
+    return True
+
+
 def _report_failure(
     attempt: int, total: int, result: subprocess.CompletedProcess[str], token: str
 ) -> None:
@@ -200,10 +276,12 @@ def push_branch(
     sleep: Callable[[float], None] | None = None,
     delays: Sequence[int] = PUSH_DELAYS,
 ) -> bool:
-    """Push HEAD to `branch`, retrying with growing waits. Never forces and never rebases.
+    """Push HEAD to `branch`, retrying with growing waits. Never forces or rewrites pushed commits.
 
     If the remote branch moved, it is fetched and merged before the next attempt; a merge
-    conflict is aborted and counts as a failed push.
+    conflict is aborted and counts as a failed push. If GitHub refuses workflow files, retrying
+    cannot help: a new branch is replayed once on the moved base (`replay_on_base`, base from
+    `default_branch()`), otherwise the push gives up at once.
 
     Args:
         branch: Branch name on the remote.
@@ -219,18 +297,19 @@ def push_branch(
     run = run or _git
     sleep = sleep or time.sleep
     total = len(delays) + 1
+    source = "HEAD"
     for attempt in range(1, total + 1):
-        result = run("push", url, f"HEAD:refs/heads/{branch}")
+        result = run("push", url, f"{source}:refs/heads/{branch}")
         if result.returncode == 0:
-            return True
+            return _adopt(source, run)
         _report_failure(attempt, total, result, token)
         if attempt == total:
             break
-        if _is_non_fast_forward(result.stderr or ""):
-            if not sync_with_remote(branch, url, run):
-                print("remote branch moved and could not be merged; giving up")
-                return False
-        else:
+        following = _next_push(result.stderr or "", branch, url, source, run)
+        if following is None:
+            return False
+        source, wait = following
+        if wait:
             sleep(delays[attempt - 1])
     return False
 

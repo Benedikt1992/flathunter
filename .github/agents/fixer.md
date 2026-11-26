@@ -31,6 +31,13 @@ permissions or other repositories.
    result: commit finished points before you investigate the rest. Stage files by
    name (`git add <files>`), and delete scratch or debug files you created (`rm`)
    instead of leaving them in the working tree.
+6. Workflow changes live in `.github/workflows.patch`, because the agent app may not
+   push files under `.github/workflows/`. Feedback on workflow behaviour, and a failing
+   `test_workflow_patch.py` (the patch no longer applies), is fixed in that patch:
+   `python .github/scripts/workflow_patch.py open` puts it into the workflow files,
+   edit them, `python .github/scripts/workflow_patch.py make` writes the patch again
+   and restores the files. Commit only `.github/workflows.patch`, never files under
+   `.github/workflows/`.
 
 ## Questions
 `open_questions` is a list of objects, not strings. Each entry is posted as its own
