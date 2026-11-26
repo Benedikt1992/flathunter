@@ -4,7 +4,7 @@
 #            ├─ red  → dispatch fix (mode=ci)              [max AGENT_MAX_ROUNDS automatic rounds]
 #            └─ green → independent review (read-only, own identity, trusted prompt from default branch)
 #                 ├─ changes requested → dispatch fix (mode=review)
-#                 └─ approved          → PR ready for review, label needs-human, maintainer requested
+#                 └─ approved          → PR ready for review (agent app token, created after the review), label needs-human, maintainer requested
 # The reviewer never sees the implementer's reasoning, cannot change code and cannot approve:
 # it posts COMMENT or REQUEST_CHANGES as github-actions[bot]; only the maintainer can approve/merge.
 name: "Agent · Review"
@@ -127,12 +127,35 @@ jobs:
         if: steps.verdict.outputs.verdict == 'request_changes' && steps.rounds.outputs.exhausted != 'true'
         run: gh workflow run agent-fix.yml --ref "$DEFAULT_BRANCH" -f pr="$PR" -f mode=review
 
+      - name: Create agent app token (after review)
+        if: steps.verdict.outputs.verdict == 'approve'
+        id: app
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.AGENT_APP_ID }}
+          private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
+
       - name: Approved → ready for the maintainer
         if: steps.verdict.outputs.verdict == 'approve'
+        env:
+          APP_TOKEN: ${{ steps.app.outputs.token }}
         run: |
-          gh pr ready "$PR" || true
+          ERR="$RUNNER_TEMP/ready.err"
+          ok=true
+          GH_TOKEN="$APP_TOKEN" gh pr ready "$PR" 2> "$ERR" || ok=false
+          draft=$(GH_TOKEN="$APP_TOKEN" gh pr view "$PR" --json isDraft --jq .isDraft 2>> "$ERR" || echo unknown)
+          if [ "$draft" != "false" ]; then ok=false; fi
           gh pr edit "$PR" --add-label needs-human --remove-label agent:in-progress --remove-label agent:stuck || true
           gh pr edit "$PR" --add-reviewer "$MAINTAINER" || true
+          if [ "$ok" = true ]; then
+            echo "PR #$PR marked ready for review" >> "$GITHUB_STEP_SUMMARY"
+          else
+            MSG=$(printf '⚠️ @%s: Could not mark PR #%s as ready for review (still a draft: %s). Error:\n\n```\n%s\n```\n[Run log](%s/%s/actions/runs/%s)' \
+              "$MAINTAINER" "$PR" "$draft" "$(head -c 500 "$ERR")" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")
+            printf '%s\n' "$MSG" >> "$GITHUB_STEP_SUMMARY"
+            gh pr comment "$PR" --body "$MSG" || true
+            exit 1
+          fi
 
       - name: Round limit reached → maintainer decides
         if: >-
