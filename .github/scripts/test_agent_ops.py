@@ -847,6 +847,10 @@ def test_questions_pointer_command_counts_valid_entries(tmp_path, capsys):
 def test_blocked_footer_with_questions_points_to_question_comments():
     for count in (1, 3):
         footer = ops.blocked_footer(count, "https://x/run/1")
+        assert footer == (
+            "Answer each question in its own comment below (**Quote reply** or start with `Qn:`), "
+            "the agent restarts automatically after the last answer. [Run log](https://x/run/1)"
+        )
         assert "Quote reply" in footer
         assert "`Qn:`" in footer
         assert "restarts automatically" in footer
